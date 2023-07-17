@@ -1,0 +1,28 @@
+import { Injectable } from '@nestjs/common';
+import { getGamesBetweenDates, getGamesByIds } from './helpers/igdb_api';
+import { index_render } from './common/interfaces/render.interface';
+import * as dayjs from 'dayjs';
+
+@Injectable()
+export class AppService {
+  root(): index_render {
+    return {
+      message: 'Hello world'
+    };
+  }
+
+  async getGames(start_date, end_date): Promise<string> {
+    const release_game = await getGamesBetweenDates(start_date, end_date);
+    const all_games_id = release_game.map(x => x.game);
+    const game_list = await getGamesByIds(all_games_id);
+
+    // Inject human formatted release date into game list
+    game_list.map(x => {
+      console.log(release_game.find(y => y.game === x.id).date);
+      x.date = dayjs.unix(release_game.find(y => y.game === x.id).date).format('DD/MM/YYYY');
+    });
+
+    console.log(game_list);
+    return game_list;
+  }
+}
