@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Render, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Render, UseGuards, Request } from '@nestjs/common';
 import { AppService } from './app.service';
 import { index_render } from './common/interfaces/render.interface';
 import { AuthGuard } from '@nestjs/passport';
@@ -9,7 +9,7 @@ export class AppController {
 
   @Get()
   @Render('index')
-  root(): index_render {
+  root(@Request() req) : index_render {
     return this.appService.root();
   }
 

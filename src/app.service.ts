@@ -16,13 +16,18 @@ export class AppService {
     const all_games_id = release_game.map(x => x.game);
     const game_list = await getGamesByIds(all_games_id);
 
+    console.log(release_game);
+
     // Inject human formatted release date into game list
     game_list.map(x => {
-      console.log(release_game.find(y => y.game === x.id).date);
-      x.date = dayjs.unix(release_game.find(y => y.game === x.id).date).format('DD/MM/YYYY');
+      const game = release_game.find(y => y.game === x.id);
+      x.platform = game.platform.name;
+      x.date = dayjs.unix(game.date).format('DD/MM/YYYY');
     });
 
     console.log(game_list);
+
+    // console.log(game_list);
     return game_list;
   }
 }
