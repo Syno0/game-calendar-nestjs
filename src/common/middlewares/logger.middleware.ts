@@ -4,12 +4,16 @@ import { Request, Response, NextFunction } from 'express';
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
+
     // Display minimal information
-    if (req.method == 'POST' && req.body)
-      console.log(
-        `${req.method} ${req.originalUrl} - ${res.statusCode}\n${JSON.stringify(req.body)}`,
-      );
-    else console.log(`${req.method} ${req.originalUrl} - ${res.statusCode}`);
+    console.log(`${req.method} ${req.originalUrl} - ${res.statusCode}`);
+
+    // If POST then show req.body
+    // if (req.method == 'POST' && req.body)
+    //   console.log(
+    //     `${req.method} ${req.originalUrl} - ${res.statusCode}\n${JSON.stringify(req.body)}`,
+    //   );
+    // else console.log(`${req.method} ${req.originalUrl} - ${res.statusCode}`);
 
     // Display full information
     // console.log({

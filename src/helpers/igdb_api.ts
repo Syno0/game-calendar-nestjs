@@ -62,6 +62,6 @@ export async function getGamesByIds(ids: number[]) {
       'Client-ID': process.env.TWITCH_CLIENT,
       Authorization: `Bearer ${igdb.access_token}`,
     },
-    body: 'fields id, name, cover.url; where id = (' + ids.join(',') + '); limit 500;',
+    body: 'fields id, name, cover.url, artworks; where id = (' + ids.join(',') + '); limit 500;',
   });
 }
