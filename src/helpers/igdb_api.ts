@@ -36,7 +36,7 @@ export async function getToken(): Promise<igdb> {
 export async function getGamesBetweenDates(start_date: string, end_date: string) {
   await getToken();
 
-  let body = 'fields date, game, platform.name; limit 500;sort date asc;'; // Max limit 500
+  let body = 'fields date, game, platform.slug, platform.platform_logo.url; limit 500;sort date asc;'; // Max limit 500
   body += ' where';
   body += ' date > ' + dayjs(start_date).unix();
   body += ' &';
@@ -62,6 +62,6 @@ export async function getGamesByIds(ids: number[]) {
       'Client-ID': process.env.TWITCH_CLIENT,
       Authorization: `Bearer ${igdb.access_token}`,
     },
-    body: 'fields id, name, cover.url, artworks; where id = (' + ids.join(',') + '); limit 500;',
+    body: 'fields id, name, cover.url, artworks, follows, hypes; where id = (' + ids.join(',') + ') & hypes > 1; limit 500;',
   });
 }
