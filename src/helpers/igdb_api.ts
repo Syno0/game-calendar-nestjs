@@ -55,6 +55,12 @@ export async function getGamesBetweenDates(start_date: string, end_date: string)
 }
 
 export async function getGamesByIds(ids: number[]) {
+
+  if(ids.length == 0)
+    return [];
+
+  const body = 'fields id, name, cover.url, artworks.url, follows, hypes; where id = (' + ids.join(',') + ') & hypes > 1; limit 500;';
+
   return await request(igdb_url + '/games', {
     method: 'POST',
     headers: {
@@ -62,6 +68,6 @@ export async function getGamesByIds(ids: number[]) {
       'Client-ID': process.env.TWITCH_CLIENT,
       Authorization: `Bearer ${igdb.access_token}`,
     },
-    body: 'fields id, name, cover.url, artworks, follows, hypes; where id = (' + ids.join(',') + ') & hypes > 1; limit 500;',
+    body
   });
 }
