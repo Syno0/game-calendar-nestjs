@@ -30,10 +30,12 @@ export class AppService {
       // Replace t_thumb cover with t_cover_big for better resolution
       if(x.cover && x.cover.url)
         x.cover.url = x.cover.url.replace('t_thumb', 't_cover_big');
+
+      x.artworks.map((artwork) => {
+        artwork.url = artwork.url.replace("t_thumb", "t_cover_big");
+      });
       return x;
     });
-
-    // console.log(game_list);
 
     // console.log(game_list);
     return game_list;

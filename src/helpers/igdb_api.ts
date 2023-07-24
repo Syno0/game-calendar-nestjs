@@ -59,7 +59,27 @@ export async function getGamesByIds(ids: number[]) {
   if(ids.length == 0)
     return [];
 
-  const body = 'fields id, name, cover.url, artworks.url, follows, hypes; where id = (' + ids.join(',') + ') & hypes > 1; limit 500;';
+  const fields = [
+    'id',
+    'name',
+    'cover.url',
+    'artworks.url',
+    'follows',
+    'hypes',
+    'aggregated_rating',
+    'aggregated_rating_count',
+    'alternative_names',
+    'rating',
+    'rating_count',
+    'storyline',
+    'summary',
+    'total_rating',
+    'total_rating_count',
+    'url',
+    'version_title'
+  ]
+
+  const body = `fields ${fields.join(',')}; where id = (${ids.join(',')}) & hypes > 1; limit 500;`;
 
   return await request(igdb_url + '/games', {
     method: 'POST',
