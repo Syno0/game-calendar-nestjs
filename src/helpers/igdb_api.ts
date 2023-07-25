@@ -62,6 +62,7 @@ export async function getGamesByIds(ids: number[]) {
   const fields = [
     'id',
     'name',
+    'category',
     'cover.url',
     'artworks.url',
     'follows',
@@ -76,10 +77,23 @@ export async function getGamesByIds(ids: number[]) {
     'total_rating',
     'total_rating_count',
     'url',
-    'version_title'
+    'version_title',
+    'websites.url',
+    'videos.id',
+    'alternative_names.name',
+    'collection.name',
+    'collection.url',
+    'dlcs.name',
+    'dlcs.url',
+    'game_engines.name',
+    'game_engines.url',
+    'franchise.name',
+    'franchise.url',
+    'game_modes.name',
+    'game_modes.url'
   ]
 
-  const body = `fields ${fields.join(',')}; where id = (${ids.join(',')}) & hypes > 1; limit 500;`;
+  const body = `fields ${fields.join(',')}; where id = (${ids.join(',')}) & (hypes > 1 | total_rating_count > 0); limit 500;`;
 
   return await request(igdb_url + '/games', {
     method: 'POST',
