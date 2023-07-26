@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { getGamesBetweenDates, getGamesByIds } from './helpers/igdb_api';
 import { index_render } from './common/interfaces/render.interface';
 import categoryEnum  from './common/enums/category';
+import statusEnum  from './common/enums/status';
 import * as dayjs from 'dayjs';
 
 @Injectable()
@@ -17,8 +18,7 @@ export class AppService {
     const all_games_id = release_game.map(x => x.game);
     const game_list = await getGamesByIds(all_games_id);
 
-    console.log(game_list);
-
+    // console.log(game_list);
     // console.log(release_game);
 
     // Inject human formatted release date into game list
@@ -32,6 +32,8 @@ export class AppService {
       x.day = dayjs.unix(game.date).format('DD');
 
       x.category = categoryEnum[x.category];
+      x.status = statusEnum[x.status];
+
       // Replace t_thumb cover with t_cover_big for better resolution
       if(x.cover && x.cover.url)
         x.cover.url = x.cover.url.replace('t_thumb', 't_cover_big');
@@ -45,6 +47,10 @@ export class AppService {
       x.hypes = x.hypes ? x.hypes : 0;
       x.follow = x.follow ? x.follow : 0;
       x.total_rating = x.total_rating ? x.total_rating : 0;
+
+      x.developer = x.involved_companies ? x.involved_companies.filter(x => x.developer).map(x => x.company) : '';
+      x.publisher = x.involved_companies ? x.involved_companies.filter(x => x.publisher).map(x => x.company) : '';
+
       return x;
     });
 

@@ -1,4 +1,4 @@
-const categoryEnum = [
+const categoryEnum: string[] = [
 	'Main game',
 	'DLC addon',
 	'Expansion',

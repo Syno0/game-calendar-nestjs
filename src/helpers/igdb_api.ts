@@ -63,6 +63,7 @@ export async function getGamesByIds(ids: number[]) {
     'id',
     'name',
     'category',
+    'status',
     'cover.url',
     'artworks.url',
     'follows',
@@ -79,7 +80,7 @@ export async function getGamesByIds(ids: number[]) {
     'url',
     'version_title',
     'websites.url',
-    'videos.id',
+    'videos.video_id',
     'alternative_names.name',
     'collection.name',
     'collection.url',
@@ -90,7 +91,10 @@ export async function getGamesByIds(ids: number[]) {
     'franchise.name',
     'franchise.url',
     'game_modes.name',
-    'game_modes.url'
+    'game_modes.url',
+    'genres.name',
+    'involved_companies.*',
+    'involved_companies.company.*',
   ]
 
   const body = `fields ${fields.join(',')}; where id = (${ids.join(',')}) & (hypes > 1 | total_rating_count > 0); limit 500;`;
