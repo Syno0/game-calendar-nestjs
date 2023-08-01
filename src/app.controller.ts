@@ -16,9 +16,15 @@ export class AppController {
   @UseGuards(AuthGuard('jwt'))
   @Post('games')
   getGames(
-    @Body('start_date') start_date: string,
-    @Body('end_date') end_date: string,
+    @Body() body: any
   ): Promise<string> {
-    return this.appService.getGames(start_date, end_date);
+    console.log(body);
+    return this.appService.getGames(body);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('platforms')
+  getPlatform(): Promise<string> {
+    return this.appService.getAllPlatforms();
   }
 }

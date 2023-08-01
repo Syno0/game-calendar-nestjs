@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { getGamesBetweenDates, getGamesByIds } from './helpers/igdb_api';
+import { getGamesBetweenDates, getGamesByIds, getAllPlatforms } from './helpers/igdb_api';
 import { index_render } from './common/interfaces/render.interface';
 import categoryEnum  from './common/enums/category';
 import statusEnum  from './common/enums/status';
@@ -13,8 +13,8 @@ export class AppService {
     };
   }
 
-  async getGames(start_date, end_date): Promise<string> {
-    const release_game = await getGamesBetweenDates(start_date, end_date);
+  async getGames({start_date, end_date, ...filters}): Promise<string> {
+    const release_game = await getGamesBetweenDates(start_date, end_date, filters);
     const all_games_id = release_game.map(x => x.game);
     const game_list = await getGamesByIds(all_games_id);
 
@@ -56,5 +56,10 @@ export class AppService {
 
     // console.log(game_list);
     return game_list;
+  }
+
+  async getAllPlatforms(): Promise<string> {
+    const platforms = await getAllPlatforms();
+    return platforms;
   }
 }

@@ -19,6 +19,7 @@ async function bootstrap() {
   // Add views and public directory
   app.useStaticAssets(join(__dirname, '..', 'public'));
   app.setBaseViewsDir(join(__dirname, '..', 'views'));
+
   // Template engine is handlebars
   app.setViewEngine('hbs');
 

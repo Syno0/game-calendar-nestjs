@@ -1,12 +1,7 @@
 import { request } from '../utils/request';
 import * as dayjs from 'dayjs';
-interface igdb {
-  access_token: string;
-  created_at: dayjs.Dayjs;
-  expires_in: number;
-  expires_at: dayjs.Dayjs;
-  token_type: string;
-}
+import { igdb, filters } from '../common/interfaces/igdb.interface';
+
 let igdb: igdb = null;
 const igdb_url = 'https://api.igdb.com/v4';
 
@@ -33,14 +28,20 @@ export async function getToken(): Promise<igdb> {
 }
 
 // Return list of game ID between dates
-export async function getGamesBetweenDates(start_date: string, end_date: string) {
+export async function getGamesBetweenDates(start_date: string, end_date: string, filters: filters) {
   await getToken();
 
-  let body = 'fields date, game, platform.slug, platform.platform_logo.url; limit 500;sort date asc;'; // Max limit 500
+  let body = 'fields date, game, platform.slug, platform.platform_logo.url; limit 500; sort date asc;'; // Max limit 500
   body += ' where';
   body += ' date > ' + dayjs(start_date).unix();
   body += ' &';
   body += ' date < ' + dayjs(end_date).unix();
+  if(filters.hypes > 0)
+    body += ' & game.hypes >= ' + filters.hypes;
+  if(filters.score)
+    body += ' & game.total_rating_count > 0';
+  if(filters.platform.length > 0)
+    body += ` & platform = (${filters.platform.map(x => x.id)})`;
   body += ';';
 
   return await request(igdb_url + '/release_dates', {
@@ -55,6 +56,7 @@ export async function getGamesBetweenDates(start_date: string, end_date: string)
 }
 
 export async function getGamesByIds(ids: number[]) {
+  await getToken();
 
   if(ids.length == 0)
     return [];
@@ -97,9 +99,34 @@ export async function getGamesByIds(ids: number[]) {
     'involved_companies.company.*',
   ]
 
-  const body = `fields ${fields.join(',')}; where id = (${ids.join(',')}) & (hypes > 1 | total_rating_count > 0); limit 500;`;
+  const body = `fields ${fields.join(',')}; where id = (${ids.join(',')}); limit 500;`;
 
   return await request(igdb_url + '/games', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain',
+      'Client-ID': process.env.TWITCH_CLIENT,
+      Authorization: `Bearer ${igdb.access_token}`,
+    },
+    body
+  });
+}
+
+export async function getAllPlatforms() {
+  await getToken();
+
+  const fields = [
+    'id',
+    'name',
+    'slug',
+    // 'generation',
+    // 'created_at',
+    // 'versions.platform_version_release_dates.y',
+  ]
+
+  const body = `fields ${fields.join(',')}; where versions.platform_version_release_dates.y > 2010; limit 500;`;
+
+  return await request(igdb_url + '/platforms', {
     method: 'POST',
     headers: {
       'Content-Type': 'text/plain',
