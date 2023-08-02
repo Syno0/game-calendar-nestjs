@@ -7,18 +7,11 @@ import { AuthGuard } from '@nestjs/passport';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  @Get()
-  @Render('index')
-  root(@Request() req) : index_render {
-    return this.appService.root();
-  }
-
   @UseGuards(AuthGuard('jwt'))
   @Post('games')
   getGames(
     @Body() body: any
   ): Promise<string> {
-    console.log(body);
     return this.appService.getGames(body);
   }
 

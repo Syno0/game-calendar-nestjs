@@ -7,11 +7,6 @@ import * as dayjs from 'dayjs';
 
 @Injectable()
 export class AppService {
-  root(): index_render {
-    return {
-      message: 'Hello world'
-    };
-  }
 
   async getGames({start_date, end_date, ...filters}): Promise<string> {
     const release_game = await getGamesBetweenDates(start_date, end_date, filters);
