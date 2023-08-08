@@ -21,7 +21,7 @@ async function bootstrap() {
   app.setBaseViewsDir(join(__dirname, '..', 'views'));
 
   // Template engine is handlebars
-  app.setViewEngine('hbs');
+  // app.setViewEngine('hbs');
 
   // Enable CORS https://github.com/expressjs/cors#configuration-options
   app.enableCors({

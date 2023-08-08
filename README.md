@@ -26,7 +26,7 @@ $ npm run start:dev
 $ npm run start:prod
 
 # Docker launch
-$ sudo docker run -p3000:3000 game-calendar-nestjs
+$ docker run -p3000:3000 --name game-calendar-nestjs game-calendar-nestjs
 ```
 
 ## Test
