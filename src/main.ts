@@ -25,8 +25,11 @@ async function bootstrap() {
 
   // Enable CORS https://github.com/expressjs/cors#configuration-options
   app.enableCors({
-    origin: ['http://127.0.0.1:3001', 'http://localhost:3001'],
-    credentials: true
+		origin: [
+			"http://127.0.0.1:3001",
+			"http://localhost:3001"
+		],
+		credentials: true,
   });
 
   // Unlock the request.cookies power

@@ -26,8 +26,9 @@ export class AuthService {
 	// 	}
 	// }
 
-	const passwordValid = await bcrypt.compare(password, process.env.BCRYPT_USER_PWD);
-	if(username === 'game_calendar_user' && passwordValid)
+	// const passwordValid = await bcrypt.compare(password, process.env.BCRYPT_USER_PWD);
+
+	if(username === 'game_calendar_user' && password == process.env.JWT_KEY)
 		return {
 			username
 		};

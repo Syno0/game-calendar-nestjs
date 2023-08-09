@@ -11,7 +11,6 @@ import { JwtStrategy } from './strategies/jwt.auth';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-
 @Module({
   imports: [PassportModule, JwtModule.register({
     secret: process.env.JWT_KEY,
