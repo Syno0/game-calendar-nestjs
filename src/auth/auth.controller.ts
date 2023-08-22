@@ -11,6 +11,7 @@ export class AuthController {
     async login(@Request() req, @Response() res) {
         const {access_token} = await this.authService.login(req.user);
         // Set JWT token in client cookie
+        // https://expressjs.com/en/5x/api.html#res.cookie
         res.cookie('access_token', access_token, {
             expires: new Date(Date.now() + 360000 + 0.1), // 10min to match JWT token expiration
             httpOnly: true,

@@ -27,7 +27,8 @@ async function bootstrap() {
   app.enableCors({
 		origin: [
 			"http://127.0.0.1:3001",
-			"http://localhost:3001"
+			"http://localhost:3001",
+      "https://gamecal.sb-pro.fr"
 		],
 		credentials: true,
   });
