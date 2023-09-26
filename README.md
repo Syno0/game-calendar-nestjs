@@ -1,8 +1,12 @@
-Game Calendar
+# Game Calendar
 
-## Description
+This project is a training project to learn React and Nest.js, it is a gaming calendar with filters and informations about games.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+It is base on IGDB API: https://api-docs.igdb.com/#getting-started
+
+You can try it here: https://gamecal.sb-pro.fr
+
+This project was bootstrapped with [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
 ## Installation
 

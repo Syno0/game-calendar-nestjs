@@ -11,6 +11,12 @@ services:
     networks:
       game-calendar:
         ipv4_address: 172.20.0.2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gamecalback.rule=Host(`gamecalback.sb-pro.fr`)"
+      - "traefik.http.routers.gamecalback.entrypoints=websecure"
+      - "traefik.http.routers.gamecalback.tls.certresolver=myresolver"
+
 
 # docker network create -d bridge --subnet=172.20.0.0/16 --gateway=172.20.0.1 game-calendar
 networks:
