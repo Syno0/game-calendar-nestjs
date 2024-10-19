@@ -33,9 +33,9 @@ export async function getGamesBetweenDates(start_date: string, end_date: string,
 
   let body = 'fields date, game, platform.slug, platform.platform_logo.url; limit 500; sort date asc;'; // Max limit 500
   body += ' where';
-  body += ' date > ' + dayjs(start_date).unix();
+  body += ' date > ' + dayjs(start_date).subtract(1, 'day').unix();
   body += ' &';
-  body += ' date < ' + dayjs(end_date).unix();
+  body += ' date < ' + dayjs(end_date).add(1, 'day').unix();
   if(filters.hypes > 0)
     body += ' & game.hypes >= ' + filters.hypes;
   if(filters.score)
