@@ -6,6 +6,7 @@ export async function request(url, options) {
 			result = await response.json();
 			result = result.message ? result.message : response.statusText;
 		} catch (err) {
+			console.error(err);
 			result = response;
 		}
 		throw result;
@@ -14,6 +15,7 @@ export async function request(url, options) {
 	try {
 		result = await response.json();
 	} catch (err) {
+		console.error(err);
 		result = response;
 	}
 	return result;

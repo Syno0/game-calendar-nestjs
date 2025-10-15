@@ -1,60 +1,66 @@
-import { Injectable } from '@nestjs/common';
-import { getGamesBetweenDates, getGamesByIds, getAllPlatforms } from './helpers/igdb_api';
-import { index_render } from './common/interfaces/render.interface';
-import categoryEnum  from './common/enums/category';
-import statusEnum  from './common/enums/status';
-import * as dayjs from 'dayjs';
+import { Injectable } from "@nestjs/common";
+import { igdbApi } from "./clients/igdb";
+import categoryEnum from "./common/enums/category";
+import statusEnum from "./common/enums/status";
+import * as dayjs from "dayjs";
 
 @Injectable()
 export class AppService {
+	async getGames({ start_date, end_date, ...filters }): Promise<string> {
+		const release_game = await igdbApi.getGamesBetweenDates(
+			start_date,
+			end_date,
+			filters
+		);
+		const all_games_id = release_game.map((x) => x.game);
+		const game_list = await igdbApi.getGamesByIds(all_games_id);
 
-  async getGames({start_date, end_date, ...filters}): Promise<string> {
-    const release_game = await getGamesBetweenDates(start_date, end_date, filters);
-    const all_games_id = release_game.map(x => x.game);
-    const game_list = await getGamesByIds(all_games_id);
+		// Inject human formatted release date into game list
+		game_list.map((x) => {
+			const game = release_game.find((y) => y.game === x.id);
+			x.platform = {
+				slug: game.platform.slug,
+				logo: game.platform?.platform_logo?.url,
+			};
+			x.date = dayjs.unix(game.date).format("DD/MM/YYYY");
+			x.day = dayjs.unix(game.date).format("DD");
 
-    // console.log(game_list);
-    // console.log(release_game);
+			x.category = categoryEnum[x.category];
+			x.status = statusEnum[x.status];
 
-    // Inject human formatted release date into game list
-    game_list.map(x => {
-      const game = release_game.find(y => y.game === x.id);
-      x.platform = {
-        slug: game.platform.slug,
-        logo: game.platform?.platform_logo?.url
-      }
-      x.date = dayjs.unix(game.date).format('DD/MM/YYYY');
-      x.day = dayjs.unix(game.date).format('DD');
+			// Replace t_thumb cover with t_cover_big for better resolution
+			if (x.cover?.url)
+				x.cover.url = x.cover.url.replace("t_thumb", "t_cover_big");
 
-      x.category = categoryEnum[x.category];
-      x.status = statusEnum[x.status];
+			if (x.artworks)
+				x.artworks.map((artwork) => {
+					artwork.url = artwork.url.replace("t_thumb", "t_cover_big");
+				});
 
-      // Replace t_thumb cover with t_cover_big for better resolution
-      if(x.cover && x.cover.url)
-        x.cover.url = x.cover.url.replace('t_thumb', 't_cover_big');
+			// Setting null to 0
+			x.hypes = x.hypes ? x.hypes : 0;
+			x.follow = x.follow ? x.follow : 0;
+			x.total_rating = x.total_rating ? x.total_rating : 0;
 
-      if(x.artworks)
-        x.artworks.map((artwork) => {
-          artwork.url = artwork.url.replace("t_thumb", "t_cover_big");
-        });
+			x.developer = x.involved_companies
+				? x.involved_companies
+						.filter((x) => x.developer)
+						.map((x) => x.company)
+				: "";
+			x.publisher = x.involved_companies
+				? x.involved_companies
+						.filter((x) => x.publisher)
+						.map((x) => x.company)
+				: "";
 
-      // Setting null to 0
-      x.hypes = x.hypes ? x.hypes : 0;
-      x.follow = x.follow ? x.follow : 0;
-      x.total_rating = x.total_rating ? x.total_rating : 0;
+			return x;
+		});
 
-      x.developer = x.involved_companies ? x.involved_companies.filter(x => x.developer).map(x => x.company) : '';
-      x.publisher = x.involved_companies ? x.involved_companies.filter(x => x.publisher).map(x => x.company) : '';
+		return game_list;
+	}
 
-      return x;
-    });
-
-    // console.log(game_list);
-    return game_list;
-  }
-
-  async getAllPlatforms(): Promise<string> {
-    const platforms = await getAllPlatforms();
-    return platforms;
-  }
+	async getAllPlatforms(): Promise<string> {
+		const platforms = await igdbApi.getAllPlatforms();
+		return platforms;
+	}
 }
