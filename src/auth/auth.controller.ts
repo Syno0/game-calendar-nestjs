@@ -5,10 +5,14 @@ import {
 	Post,
 	UseGuards,
 	Logger,
+	Body,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { AuthGuard } from "@nestjs/passport";
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from "@nestjs/swagger";
+import { LoginDto } from "./dto/login.dto";
 
+@ApiTags("Authentication")
 @Controller()
 export class AuthController {
 	private readonly logger = new Logger(AuthController.name);
@@ -16,7 +20,11 @@ export class AuthController {
 
 	@UseGuards(AuthGuard("local"))
 	@Post("auth/login")
-	async login(@Request() req, @Response() res) {
+	@ApiOperation({ summary: "Login and get JWT token" })
+	@ApiBody({ type: LoginDto })
+	@ApiResponse({ status: 200, description: "Login successful, JWT token set in cookie", type: Boolean })
+	@ApiResponse({ status: 401, description: "Invalid credentials" })
+	async login(@Request() req, @Response() res, @Body() loginDto: LoginDto) {
 		this.logger.debug("CALL FN -> login");
 		console.log("CALL FN -> login");
 		console.log(req.user);

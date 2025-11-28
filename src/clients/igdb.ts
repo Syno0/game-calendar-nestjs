@@ -14,11 +14,11 @@ class IgdbApi {
 			return this.token;
 		}
 
-		console.log("RESET TOKEN:", dayjs().format());
+		console.debug("RESET TOKEN:", dayjs().format());
 
 		const twitch_url = `https://id.twitch.tv/oauth2/token?client_id=${process.env.TWITCH_CLIENT}&client_secret=${process.env.TWITCH_SECRET}&grant_type=client_credentials`;
 
-		console.log("GET IGDB TOKEN:", twitch_url);
+		console.debug("GET IGDB TOKEN:", twitch_url);
 
 		try {
 			this.token = await request(twitch_url, {
@@ -43,7 +43,7 @@ class IgdbApi {
 		end_date: string,
 		filters: Filters
 	) {
-		console.log("CALL FN -> getGamesBetweenDates");
+		console.log("CALL FN -> getGamesBetweenDates", start_date, end_date, filters);
 		await this.getToken();
 
 		let body =
@@ -54,19 +54,25 @@ class IgdbApi {
 		body += " date < " + dayjs(end_date).add(1, "day").unix();
 		if (filters.hypes > 0) body += " & game.hypes >= " + filters.hypes;
 		if (filters.score) body += " & game.total_rating_count > 0";
-		if (filters.platform?.length > 0)
+		if (Array.isArray(filters.platform) && filters.platform?.length > 0)
 			body += ` & platform = (${filters.platform.map((x) => x.id)})`;
 		body += ";";
 
-		return await request(this.igdb_url + "/release_dates", {
-			method: "POST",
-			headers: {
-				"Content-Type": "text/plain",
-				"Client-ID": process.env.TWITCH_CLIENT,
-				Authorization: `Bearer ${this.token.access_token}`,
-			},
-			body,
-		});
+		console.log(body)
+
+		try {
+			return await request(this.igdb_url + "/release_dates", {
+				method: "POST",
+				headers: {
+					"Content-Type": "text/plain",
+					"Client-ID": process.env.TWITCH_CLIENT,
+					Authorization: `Bearer ${this.token.access_token}`,
+				},
+				body,
+			});
+		} catch(err) {
+			console.error('CALL FN -> getGamesBetweenDates -> ERROR -> ', err)
+		}
 	}
 
 	public async getGamesByIds(ids: number[]) {
