@@ -1,0 +1,136 @@
+openapi: 3.0.0
+paths:
+  /games:
+    post:
+      operationId: AppController_getGames
+      summary: Get games by date range and filters
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetGamesDto'
+      responses:
+        '200':
+          description: List of games matching the criteria
+        '401':
+          description: Unauthorized
+      tags: &ref_0
+        - Games
+      security:
+        - JWT-auth: []
+  /platforms:
+    post:
+      operationId: AppController_getPlatform
+      summary: Get all available platforms
+      parameters: []
+      responses:
+        '200':
+          description: List of all platforms
+        '401':
+          description: Unauthorized
+      tags: *ref_0
+      security:
+        - JWT-auth: []
+  /auth/login:
+    post:
+      operationId: AuthController_login
+      summary: Login and get JWT token
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+      responses:
+        '200':
+          description: Login successful, JWT token set in cookie
+          content:
+            application/json:
+              schema:
+                type: boolean
+        '401':
+          description: Invalid credentials
+      tags:
+        - Authentication
+info:
+  title: Game Calendar API
+  description: API for managing game calendar and retrieving game information from IGDB
+  version: '1.0'
+  contact: {}
+tags:
+  - name: Authentication
+    description: Authentication endpoints
+  - name: Games
+    description: Game-related endpoints
+servers: []
+components:
+  securitySchemes:
+    JWT-auth:
+      scheme: bearer
+      bearerFormat: JWT
+      type: http
+      name: JWT
+      description: Enter JWT token
+      in: header
+  schemas:
+    PlatformDto:
+      type: object
+      properties:
+        id:
+          type: number
+          description: Platform ID
+          example: 6
+        name:
+          type: string
+          description: Platform name
+          example: PC (Microsoft Windows)
+        slug:
+          type: string
+          description: Platform slug
+          example: pc
+      required:
+        - id
+    GetGamesDto:
+      type: object
+      properties:
+        start_date:
+          type: string
+          description: Start date for game releases (YYYY-MM-DD)
+          example: '2024-01-01'
+        end_date:
+          type: string
+          description: End date for game releases (YYYY-MM-DD)
+          example: '2024-12-31'
+        hypes:
+          type: number
+          description: Minimum hype count
+          example: 10
+        score:
+          type: boolean
+          description: Filter games with ratings
+          example: true
+        platform:
+          description: Filter by platforms
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformDto'
+      required:
+        - start_date
+        - end_date
+    LoginDto:
+      type: object
+      properties:
+        username:
+          type: string
+          description: Username
+          example: game_calendar_user
+        password:
+          type: string
+          description: Password
+          example: your_password
+      required:
+        - username
+        - password
