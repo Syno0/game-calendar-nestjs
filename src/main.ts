@@ -54,11 +54,9 @@ async function bootstrap() {
 	// Enable CORS https://github.com/expressjs/cors#configuration-options
 	app.enableCors({
 		origin: [
-			"http://127.0.0.1:4200/",
-			"http://localhost:4200/",
-			"http://127.0.0.1:3001",
-			"http://localhost:3001",
-			"https://gamecal.sb-pro.fr",
+			"http://127.0.0.1:3002",
+			"http://localhost:3002",
+			"https://gamecalbff.sb-pro.fr",
 			"https://gamecalendar.preview.emergentagent.com",
 		],
 		credentials: true,
