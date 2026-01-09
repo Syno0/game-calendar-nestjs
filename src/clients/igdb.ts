@@ -1,8 +1,9 @@
 import { request } from "../utils/request";
 import * as dayjs from "dayjs";
 import {
-	igdb as IgdbToken,
-	filters as Filters,
+	IgdbToken,
+	Filters,
+	Release_date,
 } from "../common/interfaces/igdb.interface";
 
 class IgdbApi {
@@ -42,8 +43,7 @@ class IgdbApi {
 		start_date: string,
 		end_date: string,
 		filters: Filters
-	) {
-		console.log("CALL FN -> getGamesBetweenDates", start_date, end_date, filters);
+	): Promise<Release_date[]> {
 		await this.getToken();
 
 		let body =
@@ -58,8 +58,6 @@ class IgdbApi {
 			body += ` & platform = (${filters.platform.map((x) => x.id)})`;
 		body += ";";
 
-		console.log(body)
-
 		try {
 			return await request(this.igdb_url + "/release_dates", {
 				method: "POST",
@@ -70,8 +68,9 @@ class IgdbApi {
 				},
 				body,
 			});
-		} catch(err) {
-			console.error('CALL FN -> getGamesBetweenDates -> ERROR -> ', err)
+		} catch (err) {
+			console.error("CALL FN -> getGamesBetweenDates -> ERROR -> ", err);
+			return [];
 		}
 	}
 
@@ -133,14 +132,17 @@ class IgdbApi {
 		});
 	}
 
-	public async getAllPlatforms() {
+	public async getAllPlatforms(ids?: number[]) {
 		await this.getToken();
 
 		const fields = ["id", "name", "slug"];
 
-		const body = `fields ${fields.join(
-			","
-		)}; where versions.platform_version_release_dates.y > 2010; limit 500;`;
+		let body = `fields ${fields.join(",")}; limit 500;`;
+		if (ids && ids.length > 0) body += ` where id = (${ids.join(",")});`;
+
+		// const body = `fields ${fields.join(
+		// 	","
+		// )}; where versions.platform_version_release_dates.y > 2010; limit 500;`;
 
 		return await request(this.igdb_url + "/platforms", {
 			method: "POST",

@@ -1,8 +1,14 @@
 import { Controller, Post, Body, UseGuards } from "@nestjs/common";
 import { AppService } from "./app.service";
 import { AuthGuard } from "@nestjs/passport";
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from "@nestjs/swagger";
-import { GetGamesDto } from "./common/dto/get_games.dto";
+import {
+	ApiTags,
+	ApiOperation,
+	ApiResponse,
+	ApiBearerAuth,
+	ApiBody,
+} from "@nestjs/swagger";
+import { GetGamesDto, GetPlatformsDto } from "./common/dto/get_games.dto";
 
 @ApiTags("Games")
 @Controller()
@@ -14,7 +20,10 @@ export class AppController {
 	@ApiBearerAuth("JWT-auth")
 	@ApiOperation({ summary: "Get games by date range and filters" })
 	@ApiBody({ type: GetGamesDto })
-	@ApiResponse({ status: 200, description: "List of games matching the criteria" })
+	@ApiResponse({
+		status: 200,
+		description: "List of games matching the criteria",
+	})
 	@ApiResponse({ status: 401, description: "Unauthorized" })
 	getGames(@Body() body: GetGamesDto): Promise<string> {
 		return this.appService.getGames(body);
@@ -24,9 +33,11 @@ export class AppController {
 	@Post("platforms")
 	@ApiBearerAuth("JWT-auth")
 	@ApiOperation({ summary: "Get all available platforms" })
+	@ApiBody({ type: GetPlatformsDto })
 	@ApiResponse({ status: 200, description: "List of all platforms" })
 	@ApiResponse({ status: 401, description: "Unauthorized" })
-	getPlatform(): Promise<string> {
-		return this.appService.getAllPlatforms();
+	getPlatform(@Body() body: GetPlatformsDto): Promise<string> {
+		console.log("CALL FN -> getPlatform", body);
+		return this.appService.getAllPlatforms(body);
 	}
 }
