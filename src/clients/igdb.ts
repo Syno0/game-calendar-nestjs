@@ -1,3 +1,6 @@
+import { Injectable, Inject } from "@nestjs/common";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { Cache } from "cache-manager";
 import { request } from "../utils/request";
 import * as dayjs from "dayjs";
 import {
@@ -6,9 +9,16 @@ import {
 	Release_date,
 } from "../common/interfaces/igdb.interface";
 
-class IgdbApi {
+const cacheTTL = process.env.CACHE_TTL
+	? parseInt(process.env.CACHE_TTL)
+	: 86400000; // 24h default
+
+@Injectable()
+export class IgdbApi {
 	private token: IgdbToken = null;
 	private readonly igdb_url = "https://api.igdb.com/v4";
+
+	constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
 
 	public async getToken(): Promise<IgdbToken> {
 		if (this.token && dayjs().isBefore(this.token.expires_at)) {
@@ -44,6 +54,18 @@ class IgdbApi {
 		end_date: string,
 		filters: Filters
 	): Promise<Release_date[]> {
+		const cacheKey = `games_dates_${start_date}_${end_date}_${JSON.stringify(
+			filters
+		)}`;
+		const cached = await this.cacheManager.get<Release_date[]>(cacheKey);
+		if (cached) {
+			console.debug(
+				`[CACHE HIT] ${cacheKey} - Returned ${cached.length} items`
+			);
+			return cached;
+		}
+		console.debug(`[CACHE MISS] ${cacheKey}`);
+
 		await this.getToken();
 
 		let body =
@@ -59,7 +81,7 @@ class IgdbApi {
 		body += ";";
 
 		try {
-			return await request(this.igdb_url + "/release_dates", {
+			const result = await request(this.igdb_url + "/release_dates", {
 				method: "POST",
 				headers: {
 					"Content-Type": "text/plain",
@@ -68,6 +90,11 @@ class IgdbApi {
 				},
 				body,
 			});
+			await this.cacheManager.set(cacheKey, result, cacheTTL);
+			console.debug(
+				`[CACHE SET] ${cacheKey} - Cached ${result.length} items (TTL: 1h)`
+			);
+			return result;
 		} catch (err) {
 			console.error("CALL FN -> getGamesBetweenDates -> ERROR -> ", err);
 			return [];
@@ -75,9 +102,20 @@ class IgdbApi {
 	}
 
 	public async getGamesByIds(ids: number[]) {
-		await this.getToken();
-
 		if (ids.length == 0) return [];
+
+		const cacheKey = `games_ids_${ids.sort().join("_")}`;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const cached = await this.cacheManager.get<any[]>(cacheKey);
+		if (cached) {
+			console.debug(
+				`[CACHE HIT] ${cacheKey} - Returned ${cached.length} items`
+			);
+			return cached;
+		}
+		console.debug(`[CACHE MISS] ${cacheKey}`);
+
+		await this.getToken();
 
 		const fields = [
 			"id",
@@ -121,7 +159,7 @@ class IgdbApi {
 			","
 		)}); limit 500;`;
 
-		return await request(this.igdb_url + "/games", {
+		const result = await request(this.igdb_url + "/games", {
 			method: "POST",
 			headers: {
 				"Content-Type": "text/plain",
@@ -130,9 +168,28 @@ class IgdbApi {
 			},
 			body,
 		});
+		await this.cacheManager.set(cacheKey, result, cacheTTL);
+		console.debug(
+			`[CACHE SET] ${cacheKey} - Cached ${result.length} items (TTL: 1h)`
+		);
+		return result;
 	}
 
 	public async getAllPlatforms(ids?: number[]) {
+		const cacheKey =
+			ids && ids.length > 0
+				? `platforms_${ids.sort().join("_")}`
+				: "platforms_all";
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const cached = await this.cacheManager.get<any[]>(cacheKey);
+		if (cached) {
+			console.debug(
+				`[CACHE HIT] ${cacheKey} - Returned ${cached.length} items`
+			);
+			return cached;
+		}
+		console.debug(`[CACHE MISS] ${cacheKey}`);
+
 		await this.getToken();
 
 		const fields = ["id", "name", "slug"];
@@ -140,11 +197,7 @@ class IgdbApi {
 		let body = `fields ${fields.join(",")}; limit 500;`;
 		if (ids && ids.length > 0) body += ` where id = (${ids.join(",")});`;
 
-		// const body = `fields ${fields.join(
-		// 	","
-		// )}; where versions.platform_version_release_dates.y > 2010; limit 500;`;
-
-		return await request(this.igdb_url + "/platforms", {
+		const result = await request(this.igdb_url + "/platforms", {
 			method: "POST",
 			headers: {
 				"Content-Type": "text/plain",
@@ -153,8 +206,10 @@ class IgdbApi {
 			},
 			body,
 		});
+		await this.cacheManager.set(cacheKey, result, cacheTTL);
+		console.debug(
+			`[CACHE SET] ${cacheKey} - Cached ${result.length} items (TTL: 24h)`
+		);
+		return result;
 	}
 }
-
-export const igdbApi = new IgdbApi();
-export default IgdbApi;

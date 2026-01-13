@@ -1,22 +1,22 @@
 import { Injectable } from "@nestjs/common";
-import { igdbApi } from "./clients/igdb";
+import { IgdbApi } from "./clients/igdb";
 import categoryEnum from "./common/enums/category";
 import statusEnum from "./common/enums/status";
 import * as dayjs from "dayjs";
 
 @Injectable()
 export class AppService {
+	constructor(private readonly igdbApi: IgdbApi) {}
+
 	async getGames({ start_date, end_date, ...filters }): Promise<string> {
-		const release_game = await igdbApi.getGamesBetweenDates(
+		const release_game = await this.igdbApi.getGamesBetweenDates(
 			start_date,
 			end_date,
 			filters
 		);
 
-		console.log(release_game);
-
 		const all_games_id = release_game.map((x) => x.game);
-		const game_list = await igdbApi.getGamesByIds(all_games_id);
+		const game_list = await this.igdbApi.getGamesByIds(all_games_id);
 
 		// Inject human formatted release date into game list
 		game_list.map((x) => {
@@ -63,7 +63,7 @@ export class AppService {
 	}
 
 	async getAllPlatforms({ ids }: { ids?: number[] }): Promise<string> {
-		const platforms = await igdbApi.getAllPlatforms(ids);
+		const platforms = await this.igdbApi.getAllPlatforms(ids);
 		return platforms;
 	}
 }

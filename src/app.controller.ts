@@ -37,7 +37,6 @@ export class AppController {
 	@ApiResponse({ status: 200, description: "List of all platforms" })
 	@ApiResponse({ status: 401, description: "Unauthorized" })
 	getPlatform(@Body() body: GetPlatformsDto): Promise<string> {
-		console.log("CALL FN -> getPlatform", body);
 		return this.appService.getAllPlatforms(body);
 	}
 }

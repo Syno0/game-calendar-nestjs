@@ -26,6 +26,7 @@
 		"generate:openapi": "ts-node -r tsconfig-paths/register scripts/generate-openapi.ts"
 	},
 	"dependencies": {
+		"@nestjs/cache-manager": "^3.1.0",
 		"@nestjs/class-validator": "^0.13.4",
 		"@nestjs/common": "^10.0.0",
 		"@nestjs/config": "^3.0.0",
@@ -35,6 +36,7 @@
 		"@nestjs/platform-express": "^10.0.0",
 		"@nestjs/swagger": "^7.4.2",
 		"bcrypt": "^5.1.0",
+		"cache-manager": "^7.2.8",
 		"class-transformer": "^0.5.1",
 		"cookie-parser": "^1.4.6",
 		"dayjs": "^1.11.9",
