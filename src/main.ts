@@ -20,7 +20,9 @@ async function bootstrap() {
 	// Swagger configuration
 	const config = new DocumentBuilder()
 		.setTitle("Game Calendar API")
-		.setDescription("API for managing game calendar and retrieving game information from IGDB")
+		.setDescription(
+			"API for managing game calendar and retrieving game information from IGDB"
+		)
 		.setVersion("1.0")
 		.addBearerAuth(
 			{
@@ -58,6 +60,7 @@ async function bootstrap() {
 			"http://localhost:3002",
 			"https://gamecalbff.sb-pro.fr",
 			"https://gamecalendar.preview.emergentagent.com",
+			"https://gamecalendar.app",
 		],
 		credentials: true,
 	});
