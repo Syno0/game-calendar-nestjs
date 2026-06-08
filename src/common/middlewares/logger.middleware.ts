@@ -9,10 +9,10 @@ export class LoggerMiddleware implements NestMiddleware {
 		res.on("finish", () => {
 			const endHrTime = process.hrtime.bigint();
 			const durationMs = Number(endHrTime - startHrTime) / 1_000_000;
+			const isLogin = req.originalUrl.split("?")[0] === "/auth/login";
+			const body = !isLogin && req.body ? JSON.stringify(req.body) : "";
 			console.log(
-				`${req.method} ${req.originalUrl} - ${res.statusCode} - ${
-					req.body ? JSON.stringify(req.body) : ""
-				} - ${durationMs.toFixed(1)}ms`
+				`${req.method} ${req.originalUrl} - ${res.statusCode} - ${body} - ${durationMs.toFixed(1)}ms`
 			);
 		});
 
