@@ -61,8 +61,6 @@ export class IgdbApi {
 		if (cached) {
 			return cached;
 		}
-		console.debug(`[CACHE MISS] ${cacheKey}`);
-
 		await this.getToken();
 
 		let body =
@@ -88,9 +86,6 @@ export class IgdbApi {
 				body,
 			});
 			await this.cacheManager.set(cacheKey, result, cacheTTL);
-			console.debug(
-				`[CACHE SET] ${cacheKey} - Cached ${result.length} items (TTL: 1h)`
-			);
 			return result;
 		} catch (err) {
 			console.error("CALL FN -> getGamesBetweenDates -> ERROR -> ", err);
@@ -107,8 +102,6 @@ export class IgdbApi {
 		if (cached) {
 			return cached;
 		}
-		console.debug(`[CACHE MISS] ${cacheKey}`);
-
 		await this.getToken();
 
 		const fields = [
@@ -163,9 +156,6 @@ export class IgdbApi {
 			body,
 		});
 		await this.cacheManager.set(cacheKey, result, cacheTTL);
-		console.debug(
-			`[CACHE SET] ${cacheKey} - Cached ${result.length} items (TTL: 1h)`
-		);
 		return result;
 	}
 
@@ -179,8 +169,6 @@ export class IgdbApi {
 		if (cached) {
 			return cached;
 		}
-		console.debug(`[CACHE MISS] ${cacheKey}`);
-
 		await this.getToken();
 
 		const fields = ["id", "name", "slug"];
@@ -198,9 +186,6 @@ export class IgdbApi {
 			body,
 		});
 		await this.cacheManager.set(cacheKey, result, cacheTTL);
-		console.debug(
-			`[CACHE SET] ${cacheKey} - Cached ${result.length} items (TTL: 24h)`
-		);
 		return result;
 	}
 }
