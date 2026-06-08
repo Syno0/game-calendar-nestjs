@@ -1,6 +1,6 @@
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
-import { AppModule } from "../src/app.module";
+import { AppModule } from "../src/modules/app/app.module";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import * as yaml from "js-yaml";
 import * as fs from "fs";
@@ -14,7 +14,9 @@ async function generateOpenApi() {
 	// Swagger configuration (same as in main.ts)
 	const config = new DocumentBuilder()
 		.setTitle("Game Calendar API")
-		.setDescription("API for managing game calendar and retrieving game information from IGDB")
+		.setDescription(
+			"API for managing game calendar and retrieving game information from IGDB"
+		)
 		.setVersion("1.0")
 		.addBearerAuth(
 			{
@@ -44,7 +46,9 @@ async function generateOpenApi() {
 	const outputPath = path.join(process.cwd(), "openapi.yml");
 	fs.writeFileSync(outputPath, yamlString, "utf8");
 
-	console.log(`✅ OpenAPI specification generated successfully at: ${outputPath}`);
+	console.log(
+		`✅ OpenAPI specification generated successfully at: ${outputPath}`
+	);
 
 	await app.close();
 }
@@ -53,4 +57,3 @@ generateOpenApi().catch((error) => {
 	console.error("❌ Error generating OpenAPI specification:", error);
 	process.exit(1);
 });
-

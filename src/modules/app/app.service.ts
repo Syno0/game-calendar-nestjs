@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
-import { IgdbApi } from "./clients/igdb";
-import categoryEnum from "./common/enums/category";
-import statusEnum from "./common/enums/status";
+import { IgdbApi } from "../../clients/igdb";
+import categoryEnum from "../../common/enums/category";
+import statusEnum from "../../common/enums/status";
 import * as dayjs from "dayjs";
 
 @Injectable()

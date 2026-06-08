@@ -8,7 +8,7 @@ import {
 	ApiBearerAuth,
 	ApiBody,
 } from "@nestjs/swagger";
-import { GetGamesDto, GetPlatformsDto } from "./common/dto/get_games.dto";
+import { GetGamesDto, GetPlatformsDto } from "../../common/dto/get_games.dto";
 
 @ApiTags("Games")
 @Controller()
