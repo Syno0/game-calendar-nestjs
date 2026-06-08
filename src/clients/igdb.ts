@@ -59,9 +59,6 @@ export class IgdbApi {
 		)}`;
 		const cached = await this.cacheManager.get<Release_date[]>(cacheKey);
 		if (cached) {
-			console.debug(
-				`[CACHE HIT] ${cacheKey} - Returned ${cached.length} items`
-			);
 			return cached;
 		}
 		console.debug(`[CACHE MISS] ${cacheKey}`);
@@ -108,9 +105,6 @@ export class IgdbApi {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const cached = await this.cacheManager.get<any[]>(cacheKey);
 		if (cached) {
-			console.debug(
-				`[CACHE HIT] ${cacheKey} - Returned ${cached.length} items`
-			);
 			return cached;
 		}
 		console.debug(`[CACHE MISS] ${cacheKey}`);
@@ -183,9 +177,6 @@ export class IgdbApi {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const cached = await this.cacheManager.get<any[]>(cacheKey);
 		if (cached) {
-			console.debug(
-				`[CACHE HIT] ${cacheKey} - Returned ${cached.length} items`
-			);
 			return cached;
 		}
 		console.debug(`[CACHE MISS] ${cacheKey}`);
