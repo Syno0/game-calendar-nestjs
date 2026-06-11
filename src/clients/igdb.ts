@@ -1,4 +1,4 @@
-import { Injectable, Inject } from "@nestjs/common";
+import { Injectable, Inject, Logger } from "@nestjs/common";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
 import { request } from "../utils/request";
@@ -15,6 +15,7 @@ const cacheTTL = process.env.CACHE_TTL
 
 @Injectable()
 export class IgdbApi {
+	private readonly logger = new Logger(IgdbApi.name);
 	private token: IgdbToken = null;
 	private readonly igdb_url = "https://api.igdb.com/v4";
 
@@ -25,11 +26,11 @@ export class IgdbApi {
 			return this.token;
 		}
 
-		console.debug("RESET TOKEN:", dayjs().format());
+		this.logger.debug(`RESET TOKEN: ${dayjs().format()}`);
 
 		const twitch_url = `https://id.twitch.tv/oauth2/token?client_id=${process.env.TWITCH_CLIENT}&client_secret=${process.env.TWITCH_SECRET}&grant_type=client_credentials`;
 
-		console.debug("GET IGDB TOKEN:", twitch_url);
+		this.logger.debug(`GET IGDB TOKEN: ${twitch_url}`);
 
 		try {
 			this.token = await request(twitch_url, {
@@ -39,7 +40,7 @@ export class IgdbApi {
 				},
 			});
 		} catch (error) {
-			console.error("ERROR GET IGDB TOKEN:", error);
+			this.logger.error(`ERROR GET IGDB TOKEN: ${JSON.stringify(error)}`);
 			throw error;
 		}
 
@@ -88,7 +89,9 @@ export class IgdbApi {
 			await this.cacheManager.set(cacheKey, result, cacheTTL);
 			return result;
 		} catch (err) {
-			console.error("CALL FN -> getGamesBetweenDates -> ERROR -> ", err);
+			this.logger.error(
+				`CALL FN -> getGamesBetweenDates -> ERROR -> ${JSON.stringify(err)}`
+			);
 			return [];
 		}
 	}

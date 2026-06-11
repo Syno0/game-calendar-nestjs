@@ -1,14 +1,18 @@
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
+import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
 import { join } from "path";
 import * as cookieParser from "cookie-parser";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { winstonConfig } from "./common/logger/winston.config";
 // import { AllExceptionsFilter } from './exceptions/all-exception.filter';
 // import { UnhandledInterceptor } from './interceptors/unhandled.interceptor';
 
 async function bootstrap() {
-	const app = await NestFactory.create<NestExpressApplication>(AppModule);
+	const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+		logger: WinstonModule.createLogger(winstonConfig),
+	});
 
 	// Add AllException Filter to all app
 	// const httpAdapter = app.get(HttpAdapterHost);

@@ -1,8 +1,10 @@
-import { Injectable, NestMiddleware } from "@nestjs/common";
+import { Injectable, Logger, NestMiddleware } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
+	private readonly logger = new Logger("HTTP");
+
 	use(req: Request, res: Response, next: NextFunction) {
 		const startHrTime = process.hrtime.bigint();
 
@@ -11,7 +13,7 @@ export class LoggerMiddleware implements NestMiddleware {
 			const durationMs = Number(endHrTime - startHrTime) / 1_000_000;
 			const isLogin = req.originalUrl.split("?")[0] === "/auth/login";
 			const body = !isLogin && req.body ? JSON.stringify(req.body) : "";
-			console.log(
+			this.logger.log(
 				`${req.method} ${req.originalUrl} - ${res.statusCode} - ${body} - ${durationMs.toFixed(1)}ms`
 			);
 		});
