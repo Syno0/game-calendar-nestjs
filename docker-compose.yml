@@ -3,16 +3,20 @@ version: "3"
 services:
   game-calendar-nestjs:
     container_name: game-calendar-nestjs
+    mem_limit: 1g
+    restart: unless-stopped
     image: game-calendar-nestjs
     env_file:
       - .env
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=768
     ports:
       - 3000:3000
     volumes:
       - ./logs:/app/logs
     networks:
       game-calendar:
-        ipv4_address: 172.20.0.2
+        ipv4_address: 172.20.0.8
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.gamecalback.rule=Host(`gamecalback.sb-pro.fr`)"

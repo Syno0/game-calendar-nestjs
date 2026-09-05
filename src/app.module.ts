@@ -1,5 +1,7 @@
 import { Module, NestModule, MiddlewareConsumer } from "@nestjs/common";
 import { CacheModule } from "@nestjs/cache-manager";
+import { Keyv } from "keyv";
+import { KeyvCacheableMemory } from "cacheable";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { ConfigModule } from "@nestjs/config";
@@ -10,12 +12,20 @@ import { LoggerMiddleware } from "./common/middlewares/logger.middleware";
 @Module({
 	imports: [
 		ConfigModule.forRoot(),
-		CacheModule.register({
+		CacheModule.registerAsync({
 			isGlobal: true,
-			ttl: process.env.CACHE_TTL
-				? parseInt(process.env.CACHE_TTL)
-				: 3600000,
-			max: 100,
+			useFactory: () => ({
+				stores: [
+					new Keyv({
+						store: new KeyvCacheableMemory({
+							ttl: process.env.CACHE_TTL
+								? parseInt(process.env.CACHE_TTL)
+								: 3600000,
+							lruSize: 100,
+						}),
+					}),
+				],
+			}),
 		}),
 		AuthModule,
 		IgdbModule,
