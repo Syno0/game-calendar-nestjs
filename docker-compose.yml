@@ -1,6 +1,26 @@
 version: "3"
 
 services:
+  # La base des comptes et des favoris. Elle n'expose aucun port sur l'hôte :
+  # seuls les conteneurs du réseau game-calendar ont à l'atteindre.
+  postgres:
+    container_name: game-calendar-postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: "TO_REPLACE"
+      POSTGRES_DB: game_calendar
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - game-calendar
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d game_calendar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   game-calendar-nestjs:
     container_name: game-calendar-nestjs
     mem_limit: 1g
@@ -14,6 +34,11 @@ services:
       - 3000:3000
     volumes:
       - ./logs:/app/logs
+    # Forme simple plutôt que `condition: service_healthy`, que docker-compose v1
+    # rejette en version "3". Si Postgres n'est pas encore prêt, `restart:
+    # unless-stopped` relance le back jusqu'à ce qu'il se connecte.
+    depends_on:
+      - postgres
     networks:
       game-calendar:
         ipv4_address: 172.20.0.8
@@ -28,3 +53,6 @@ services:
 networks:
   game-calendar:
     external: true
+
+volumes:
+  postgres_data:
