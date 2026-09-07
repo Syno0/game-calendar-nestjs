@@ -7,6 +7,9 @@ import { AppService } from "./app.service";
 import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./auth/auth.module";
 import { IgdbModule } from "./clients/igdb.module";
+import { PrismaModule } from "./prisma/prisma.module";
+import { UserAuthModule } from "./user-auth/user-auth.module";
+import { FavoritesModule } from "./favorites/favorites.module";
 import { LoggerMiddleware } from "./common/middlewares/logger.middleware";
 
 @Module({
@@ -27,7 +30,10 @@ import { LoggerMiddleware } from "./common/middlewares/logger.middleware";
 				],
 			}),
 		}),
+		PrismaModule,
 		AuthModule,
+		UserAuthModule,
+		FavoritesModule,
 		IgdbModule,
 	],
 	controllers: [AppController],

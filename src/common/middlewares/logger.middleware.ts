@@ -11,10 +11,14 @@ export class LoggerMiddleware implements NestMiddleware {
 		res.on("finish", () => {
 			const endHrTime = process.hrtime.bigint();
 			const durationMs = Number(endHrTime - startHrTime) / 1_000_000;
-			const isLogin = req.originalUrl.split("?")[0] === "/auth/login";
-			const body = !isLogin && req.body ? JSON.stringify(req.body) : "";
+			const path = req.originalUrl.split("?")[0];
+			// Credentials and OAuth codes must never reach the log files.
+			const isSensitive =
+				path === "/auth/login" || path.startsWith("/auth/oauth");
+			const body = !isSensitive && req.body ? JSON.stringify(req.body) : "";
+			const url = isSensitive ? path : req.originalUrl;
 			this.logger.log(
-				`${req.method} ${req.originalUrl} - ${res.statusCode} - ${body} - ${durationMs.toFixed(1)}ms`
+				`${req.method} ${url} - ${res.statusCode} - ${body} - ${durationMs.toFixed(1)}ms`
 			);
 		});
 

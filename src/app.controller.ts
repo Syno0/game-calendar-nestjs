@@ -25,7 +25,8 @@ export class AppController {
 		description: "List of games matching the criteria",
 	})
 	@ApiResponse({ status: 401, description: "Unauthorized" })
-	getGames(@Body() body: GetGamesDto): Promise<string> {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	getGames(@Body() body: GetGamesDto): Promise<any[]> {
 		return this.appService.getGames(body);
 	}
 

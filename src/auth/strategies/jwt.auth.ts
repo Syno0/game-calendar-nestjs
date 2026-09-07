@@ -14,6 +14,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 			]),
 			ignoreExpiration: false,
 			secretOrKey: process.env.JWT_KEY,
+			// Both token families are signed with JWT_KEY; the audience is what
+			// keeps an end-user token from authenticating as the service account.
+			audience: "service",
 		});
 	}
 

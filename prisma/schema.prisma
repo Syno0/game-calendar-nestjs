@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Provider {
+  TWITCH
+  DISCORD
+}
+
+model User {
+  id          String     @id @default(cuid())
+  // Null when the provider gave us no verified email — such an account can
+  // never be auto-linked to another provider (see UserAuthService.upsertUser).
+  email       String?    @unique
+  displayName String
+  avatarUrl   String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  accounts    Account[]
+  favorites   Favorite[]
+}
+
+model Account {
+  id                String   @id @default(cuid())
+  provider          Provider
+  providerAccountId String
+  email             String?
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Favorite {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  igdbGameId   Int
+  // Snapshot kept only as a display fallback when IGDB is unreachable.
+  gameName     String
+  coverUrl     String?
+  platformSlug String?
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, igdbGameId])
+  @@index([userId])
+}

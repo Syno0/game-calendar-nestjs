@@ -74,6 +74,10 @@ export class IgdbApi {
 		if (filters.score) body += " & game.total_rating_count > 0";
 		if (Array.isArray(filters.platform) && filters.platform?.length > 0)
 			body += ` & platform = (${filters.platform.map((x) => x.id)})`;
+		// `= (...)` on an array field is IGDB's "contains at least one of", so a
+		// game matches as soon as one of its genres was asked for.
+		if (Array.isArray(filters.genres) && filters.genres.length > 0)
+			body += ` & game.genres = (${filters.genres.join(",")})`;
 		body += ";";
 
 		try {
@@ -96,10 +100,74 @@ export class IgdbApi {
 		}
 	}
 
+	/**
+	 * Release rows for an arbitrary set of games — the favorites view needs
+	 * dates, and getGamesByIds() does not return any.
+	 *
+	 * A game has one row per platform (and per region), so the ids are queried
+	 * in small batches and each batch is paged until IGDB stops filling its
+	 * 500-row ceiling.
+	 */
+	public async getReleaseDatesByGameIds(
+		ids: number[]
+	): Promise<Release_date[]> {
+		if (ids.length == 0) return [];
+
+		const sorted = [...ids].sort((a, b) => a - b);
+		const cacheKey = `release_dates_games_${sorted.join("_")}`;
+		const cached = await this.cacheManager.get<Release_date[]>(cacheKey);
+		if (cached) {
+			return cached;
+		}
+		await this.getToken();
+
+		const BATCH_SIZE = 50;
+		const PAGE_SIZE = 500;
+		const rows: Release_date[] = [];
+
+		try {
+			for (let i = 0; i < sorted.length; i += BATCH_SIZE) {
+				const batch = sorted.slice(i, i + BATCH_SIZE);
+				let offset = 0;
+				let page: Release_date[];
+
+				do {
+					const body =
+						"fields date, game, platform.slug, platform.platform_logo.url;" +
+						` where game = (${batch.join(",")});` +
+						` sort date asc; limit ${PAGE_SIZE}; offset ${offset};`;
+
+					page = await request(this.igdb_url + "/release_dates", {
+						method: "POST",
+						headers: {
+							"Content-Type": "text/plain",
+							"Client-ID": process.env.TWITCH_CLIENT,
+							Authorization: `Bearer ${this.token.access_token}`,
+						},
+						body,
+					});
+					rows.push(...page);
+					offset += PAGE_SIZE;
+				} while (page.length === PAGE_SIZE);
+			}
+		} catch (err) {
+			this.logger.error(
+				`CALL FN -> getReleaseDatesByGameIds -> ERROR -> ${JSON.stringify(err)}`
+			);
+			return [];
+		}
+
+		await this.cacheManager.set(cacheKey, rows, cacheTTL);
+		return rows;
+	}
+
 	public async getGamesByIds(ids: number[]) {
 		if (ids.length == 0) return [];
 
-		const cacheKey = `games_ids_${ids.sort().join("_")}`;
+		// Numeric sort on a copy: the default comparator is lexicographic, so
+		// [2,9,10] and [10,9,2] used to produce different keys for the same set,
+		// and sorting in place silently reordered the caller's array.
+		const cacheKey = `games_ids_${[...ids].sort((a, b) => a - b).join("_")}`;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const cached = await this.cacheManager.get<any[]>(cacheKey);
 		if (cached) {

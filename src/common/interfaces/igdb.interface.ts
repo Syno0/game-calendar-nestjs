@@ -21,6 +21,7 @@ export interface Filters {
 	hypes?: number;
 	score?: boolean;
 	platform?: Platform[];
+	genres?: number[];
 }
 
 export interface Release_date {

@@ -68,6 +68,18 @@ export class GetGamesDto {
 	@ValidateNested({ each: true })
 	@Type(() => PlatformDto)
 	platform?: PlatformDto[];
+
+	@ApiPropertyOptional({
+		description:
+			"Filter by IGDB genre ids — a game matches if it carries at least one of them",
+		type: [Number],
+		example: [12, 31],
+	})
+	@IsOptional()
+	@IsArray()
+	@IsNumber({}, { each: true })
+	@Type(() => Number)
+	genres?: number[];
 }
 
 export class GetPlatformsDto {

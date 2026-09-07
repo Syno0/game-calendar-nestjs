@@ -13,6 +13,9 @@ RUN npm ci
 # Bundle app source
 COPY . .
 
+# Generate the Prisma client (needs prisma/schema.prisma, so after COPY)
+RUN npx prisma generate
+
 # Creates a "dist" folder with the production build
 RUN npm run build
 
