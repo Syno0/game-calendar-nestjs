@@ -1,6 +1,10 @@
 # Base image
 FROM node:22-alpine
 
+# Polices pour le rendu des images de partage : l'image alpine n'en embarque
+# aucune, et @napi-rs/canvas dessinerait alors des rectangles vides.
+RUN apk add --no-cache font-noto
+
 # Create app directory
 WORKDIR /app
 

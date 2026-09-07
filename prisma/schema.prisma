@@ -13,16 +13,21 @@ enum Provider {
 }
 
 model User {
-  id          String     @id @default(cuid())
+  id             String     @id @default(cuid())
   // Null when the provider gave us no verified email — such an account can
   // never be auto-linked to another provider (see UserAuthService.upsertUser).
-  email       String?    @unique
-  displayName String
-  avatarUrl   String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  accounts    Account[]
-  favorites   Favorite[]
+  email          String?    @unique
+  displayName    String
+  avatarUrl      String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  // Jeton de partage public. Null = aucun lien actif : le partage est un
+  // geste explicite, jamais l'état par défaut. Le régénérer écrase la valeur,
+  // ce qui invalide l'ancien lien — c'est le mécanisme de révocation.
+  shareToken     String?    @unique
+  shareCreatedAt DateTime?
+  accounts       Account[]
+  favorites      Favorite[]
 }
 
 model Account {
