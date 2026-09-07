@@ -8,7 +8,11 @@ import {
 	ApiBearerAuth,
 	ApiBody,
 } from "@nestjs/swagger";
-import { GetGamesDto, GetPlatformsDto } from "./common/dto/get_games.dto";
+import {
+	GetGamesDto,
+	GetPlatformsDto,
+	SearchGamesDto,
+} from "./common/dto/get_games.dto";
 
 @ApiTags("Games")
 @Controller()
@@ -28,6 +32,21 @@ export class AppController {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	getGames(@Body() body: GetGamesDto): Promise<any[]> {
 		return this.appService.getGames(body);
+	}
+
+	@UseGuards(AuthGuard("jwt"))
+	@Post("search")
+	@ApiBearerAuth("JWT-auth")
+	@ApiOperation({ summary: "Search games by name" })
+	@ApiBody({ type: SearchGamesDto })
+	@ApiResponse({
+		status: 200,
+		description: "Matching games, most relevant first",
+	})
+	@ApiResponse({ status: 401, description: "Unauthorized" })
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	searchGames(@Body() body: SearchGamesDto): Promise<any[]> {
+		return this.appService.searchGames(body.query, body.limit);
 	}
 
 	@UseGuards(AuthGuard("jwt"))

@@ -46,6 +46,16 @@ export class FavoritesService {
 		});
 	}
 
+	/**
+	 * Combien d'utilisateurs ont ce jeu en favori.
+	 *
+	 * Agrégat volontairement non nominatif : c'est un compteur public affiché
+	 * dans la fiche du jeu, il ne dit jamais *qui* a mis le jeu en favori.
+	 */
+	countForGame(igdbGameId: number): Promise<number> {
+		return this.prisma.favorite.count({ where: { igdbGameId } });
+	}
+
 	async remove(userId: string, igdbGameId: number) {
 		await this.prisma.favorite.deleteMany({ where: { userId, igdbGameId } });
 	}

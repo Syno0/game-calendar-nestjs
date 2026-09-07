@@ -5,6 +5,9 @@ import {
 	IsNumber,
 	IsBoolean,
 	IsArray,
+	MaxLength,
+	Min,
+	Max,
 	ValidateNested,
 } from "@nestjs/class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
@@ -92,4 +95,26 @@ export class GetPlatformsDto {
 	@ValidateNested({ each: true })
 	@Type(() => PlatformDto)
 	ids?: number[];
+}
+
+export class SearchGamesDto {
+	@ApiProperty({
+		description: "Game name to search for",
+		example: "resident evil",
+	})
+	@IsNotEmpty()
+	@IsString()
+	@MaxLength(100)
+	query: string;
+
+	@ApiPropertyOptional({
+		description: "Maximum number of results (1-20)",
+		example: 8,
+	})
+	@IsOptional()
+	@IsNumber()
+	@Min(1)
+	@Max(20)
+	@Type(() => Number)
+	limit?: number;
 }

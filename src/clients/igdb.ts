@@ -6,12 +6,44 @@ import * as dayjs from "dayjs";
 import {
 	IgdbToken,
 	Filters,
+	IgdbSearchHit,
 	Release_date,
 } from "../common/interfaces/igdb.interface";
 
 const cacheTTL = process.env.CACHE_TTL
 	? parseInt(process.env.CACHE_TTL)
 	: 86400000; // 24h default
+
+export const SEARCH_DEFAULT_LIMIT = 8;
+export const SEARCH_MAX_LIMIT = 20;
+
+/**
+ * Types de jeux écartés de la recherche : compilation (3), mod (5), fork (12),
+ * pack (13), mise à jour (14). Rien de tout cela n'est un jeu qu'on cherche
+ * dans un calendrier de sorties.
+ *
+ * Attention, c'est bien `game_type` et non l'ancien `category` : IGDB a retiré
+ * ce dernier de `/games`, et un `where category = ...` n'y renvoie plus rien —
+ * silencieusement.
+ */
+const EXCLUDED_GAME_TYPES = [3, 5, 12, 13, 14];
+
+/**
+ * Rend un terme de recherche sûr à interpoler dans une requête APICalypse.
+ *
+ * Le corps envoyé à IGDB est du texte brut concaténé : un guillemet ou un
+ * point-virgule laissé dans la saisie sort de la chaîne `search "..."` et
+ * réécrit la requête. Tout ce qui pourrait la refermer est donc retiré, et
+ * la longueur est bornée pour ne pas expédier un roman à IGDB.
+ */
+export const sanitizeSearchTerm = (query: string): string => {
+	if (typeof query !== "string") return "";
+	return query
+		.replace(/[\\";\r\n]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, 100);
+};
 
 @Injectable()
 export class IgdbApi {
@@ -65,7 +97,7 @@ export class IgdbApi {
 		await this.getToken();
 
 		let body =
-			"fields date, game, platform.slug, platform.platform_logo.url; limit 500; sort date asc;";
+			"fields date, game, platform.name, platform.slug, platform.platform_logo.url; limit 500; sort date asc;";
 		body += " where";
 		body += " date > " + dayjs(start_date).subtract(1, "day").unix();
 		body += " &";
@@ -133,7 +165,7 @@ export class IgdbApi {
 
 				do {
 					const body =
-						"fields date, game, platform.slug, platform.platform_logo.url;" +
+						"fields date, game, platform.name, platform.slug, platform.platform_logo.url;" +
 						` where game = (${batch.join(",")});` +
 						` sort date asc; limit ${PAGE_SIZE}; offset ${offset};`;
 
@@ -178,7 +210,9 @@ export class IgdbApi {
 		const fields = [
 			"id",
 			"name",
-			"category",
+			// `game_type` a remplacé `category`, qu'IGDB ne renvoie plus du tout :
+			// un `fields category` ne remonte rien, et sans bruit.
+			"game_type",
 			"status",
 			"cover.url",
 			"artworks.url",
@@ -228,6 +262,61 @@ export class IgdbApi {
 		});
 		await this.cacheManager.set(cacheKey, result, cacheTTL);
 		return result;
+	}
+
+	/**
+	 * Recherche IGDB par nom, pour la loupe du calendrier.
+	 *
+	 * Ne renvoie que des identifiants : l'enrichissement (jaquette, genres,
+	 * date de sortie) est fait par `AppService.getGamesByIds`, qui sait déjà
+	 * choisir la bonne sortie parmi les rééditions et les lancements régionaux.
+	 *
+	 * `version_parent = null` écarte les éditions dérivées (« GOTY », « Deluxe »),
+	 * qui noieraient le jeu de base sous des doublons. Le filtre sur
+	 * `game_type` retire compilations, packs, mods, forks et mises à jour :
+	 * sans lui, une recherche « resident evil » remonte d'abord six coffrets.
+	 * Les DLC et épisodes restent, eux : ils ont une date de sortie et peuvent
+	 * donc apparaître dans le calendrier, où l'on doit pouvoir les retrouver.
+	 */
+	public async searchGames(
+		query: string,
+		limit = SEARCH_DEFAULT_LIMIT
+	): Promise<IgdbSearchHit[]> {
+		const term = sanitizeSearchTerm(query);
+		if (!term) return [];
+
+		const size = Math.min(Math.max(limit, 1), SEARCH_MAX_LIMIT);
+		const cacheKey = `search_${term.toLowerCase()}_${size}`;
+		const cached = await this.cacheManager.get<IgdbSearchHit[]>(cacheKey);
+		if (cached) {
+			return cached;
+		}
+		await this.getToken();
+
+		const body =
+			`search "${term}";` +
+			" fields id,name;" +
+			` where version_parent = null & game_type != (${EXCLUDED_GAME_TYPES.join(",")});` +
+			` limit ${size};`;
+
+		try {
+			const result = await request(this.igdb_url + "/games", {
+				method: "POST",
+				headers: {
+					"Content-Type": "text/plain",
+					"Client-ID": process.env.TWITCH_CLIENT,
+					Authorization: `Bearer ${this.token.access_token}`,
+				},
+				body,
+			});
+			await this.cacheManager.set(cacheKey, result, cacheTTL);
+			return result;
+		} catch (err) {
+			this.logger.error(
+				`CALL FN -> searchGames -> ERROR -> ${JSON.stringify(err)}`
+			);
+			return [];
+		}
 	}
 
 	public async getAllPlatforms(ids?: number[]) {

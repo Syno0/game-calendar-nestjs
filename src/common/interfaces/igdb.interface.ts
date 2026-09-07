@@ -30,3 +30,9 @@ export interface Release_date {
 	game: number;
 	platform: Platform;
 }
+
+/** Une ligne de résultat de `IgdbApi.searchGames` : juste de quoi enchaîner. */
+export interface IgdbSearchHit {
+	id: number;
+	name: string;
+}
