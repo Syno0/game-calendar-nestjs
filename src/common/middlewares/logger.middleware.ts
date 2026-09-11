@@ -13,8 +13,13 @@ export class LoggerMiddleware implements NestMiddleware {
 			const durationMs = Number(endHrTime - startHrTime) / 1_000_000;
 			const path = req.originalUrl.split("?")[0];
 			// Credentials and OAuth codes must never reach the log files.
+			// `/admin/login` en fait partie : les journaux tournent sur
+			// quatorze jours, et le corps de cette requête porte le mot de
+			// passe du back-office en clair.
 			const isSensitive =
-				path === "/auth/login" || path.startsWith("/auth/oauth");
+				path === "/auth/login" ||
+				path === "/admin/login" ||
+				path.startsWith("/auth/oauth");
 			const body = !isSensitive && req.body ? JSON.stringify(req.body) : "";
 			const url = isSensitive ? path : req.originalUrl;
 			this.logger.log(

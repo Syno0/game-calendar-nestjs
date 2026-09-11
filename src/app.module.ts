@@ -5,6 +5,7 @@ import { KeyvCacheableMemory } from "cacheable";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { ConfigModule } from "@nestjs/config";
+import { AdminModule } from "./admin/admin.module";
 import { AuthModule } from "./auth/auth.module";
 import { IgdbModule } from "./clients/igdb.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -32,6 +33,7 @@ import { LoggerMiddleware } from "./common/middlewares/logger.middleware";
 		}),
 		PrismaModule,
 		AuthModule,
+		AdminModule,
 		UserAuthModule,
 		FavoritesModule,
 		IgdbModule,
