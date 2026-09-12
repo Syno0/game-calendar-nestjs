@@ -36,6 +36,47 @@ const EXCLUDED_GAME_TYPES = [3, 5, 12, 13, 14];
  * réécrit la requête. Tout ce qui pourrait la refermer est donc retiré, et
  * la longueur est bornée pour ne pas expédier un roman à IGDB.
  */
+/**
+ * L'ordre des résultats : du plus sûrement voulu au plus improbable.
+ *
+ *  1. le titre exact, s'il existe — on le cherchait, pas sa suite ;
+ *  2. les titres qui *commencent* par ce qui est tapé, le plus attendu d'abord
+ *     (c'est ce que fait quelqu'un qui tape un nom du début) ;
+ *  3. le classement par ressemblance d'IGDB, qui rattrape noms alternatifs et
+ *     fautes de frappe ;
+ *  4. le reste des titres contenant le terme, toujours par hype.
+ *
+ * Les doublons disparaissent au passage : les deux requêtes se recoupent
+ * largement dès que la recherche est simple.
+ */
+export const mergeSearchHits = (
+	term: string,
+	byRelevance: IgdbSearchHit[],
+	byName: IgdbSearchHit[],
+	limit: number
+): IgdbSearchHit[] => {
+	const needle = term.toLowerCase();
+	const name = (hit: IgdbSearchHit) => (hit.name ?? "").toLowerCase();
+
+	const exact = byName.filter((hit) => name(hit) === needle);
+	const prefixed = byName.filter(
+		(hit) => name(hit) !== needle && name(hit).startsWith(needle)
+	);
+	const rest = byName.filter((hit) => !name(hit).startsWith(needle));
+
+	const seen = new Set<number>();
+	const merged: IgdbSearchHit[] = [];
+
+	for (const hit of [...exact, ...prefixed, ...byRelevance, ...rest]) {
+		if (!hit || seen.has(hit.id)) continue;
+		seen.add(hit.id);
+		merged.push({ id: hit.id, name: hit.name });
+		if (merged.length === limit) break;
+	}
+
+	return merged;
+};
+
 export const sanitizeSearchTerm = (query: string): string => {
 	if (typeof query !== "string") return "";
 	return query
@@ -281,6 +322,20 @@ export class IgdbApi {
 	 * Les DLC et épisodes restent, eux : ils ont une date de sortie et peuvent
 	 * donc apparaître dans le calendrier, où l'on doit pouvoir les retrouver.
 	 */
+	/**
+	 * Recherche par nom, en deux requêtes complémentaires.
+	 *
+	 * L'opérateur `search` d'IGDB classe par ressemblance mais ne connaît que
+	 * les mots entiers : « Clockwork Rev » ne renvoie rien du tout, alors qu'on
+	 * tape justement un nom lettre par lettre. Il ignore aussi complètement la
+	 * notoriété, si bien que « clockwork » remonte huit obscurités et laisse
+	 * « Clockwork Revolution » (104 hypes) hors de la liste.
+	 *
+	 * `where name ~ *"…"*` répond aux deux : c'est une recherche de sous-chaîne,
+	 * qui accepte un mot commencé, et elle se trie par hype. On garde malgré
+	 * tout `search` à côté : lui seul retrouve un jeu par un nom alternatif
+	 * (« ff7 ») ou malgré une faute de frappe.
+	 */
 	public async searchGames(
 		query: string,
 		limit = SEARCH_DEFAULT_LIMIT
@@ -289,29 +344,31 @@ export class IgdbApi {
 		if (!term) return [];
 
 		const size = Math.min(Math.max(limit, 1), SEARCH_MAX_LIMIT);
-		const cacheKey = `search_${term.toLowerCase()}_${size}`;
+		const cacheKey = `search_v2_${term.toLowerCase()}_${size}`;
 		const cached = await this.cacheManager.get<IgdbSearchHit[]>(cacheKey);
 		if (cached) {
 			return cached;
 		}
 		await this.getToken();
 
-		const body =
-			`search "${term}";` +
-			" fields id,name;" +
-			` where version_parent = null & game_type != (${EXCLUDED_GAME_TYPES.join(",")});` +
-			` limit ${size};`;
+		const excluded = `version_parent = null & game_type != (${EXCLUDED_GAME_TYPES.join(",")})`;
 
 		try {
-			const result = await request(this.igdb_url + "/games", {
-				method: "POST",
-				headers: {
-					"Content-Type": "text/plain",
-					"Client-ID": process.env.TWITCH_CLIENT,
-					Authorization: `Bearer ${this.token.access_token}`,
-				},
-				body,
-			});
+			// Les deux ensemble : elles ne se recouvrent pas, et l'une sans
+			// l'autre laisse passer des jeux que l'utilisateur cherche.
+			const [byRelevance, byName] = await Promise.all([
+				this.searchRequest(
+					`search "${term}"; fields id,name;` +
+						` where ${excluded}; limit ${size};`
+				),
+				this.searchRequest(
+					`fields id,name,hypes;` +
+						` where name ~ *"${term}"* & ${excluded};` +
+						` sort hypes desc; limit ${size};`
+				),
+			]);
+
+			const result = mergeSearchHits(term, byRelevance, byName, size);
 			await this.cacheManager.set(cacheKey, result, cacheTTL);
 			return result;
 		} catch (err) {
@@ -320,6 +377,19 @@ export class IgdbApi {
 			);
 			return [];
 		}
+	}
+
+	/** Le corps d'une requête `/games`, les en-têtes étant toujours les mêmes. */
+	private searchRequest(body: string): Promise<IgdbSearchHit[]> {
+		return request(this.igdb_url + "/games", {
+			method: "POST",
+			headers: {
+				"Content-Type": "text/plain",
+				"Client-ID": process.env.TWITCH_CLIENT,
+				Authorization: `Bearer ${this.token.access_token}`,
+			},
+			body,
+		});
 	}
 
 	public async getAllPlatforms(ids?: number[]) {
