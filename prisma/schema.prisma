@@ -13,21 +13,22 @@ enum Provider {
 }
 
 model User {
-  id             String     @id @default(cuid())
+  id             String             @id @default(cuid())
   // Null when the provider gave us no verified email — such an account can
   // never be auto-linked to another provider (see UserAuthService.upsertUser).
-  email          String?    @unique
+  email          String?            @unique
   displayName    String
   avatarUrl      String?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
   // Jeton de partage public. Null = aucun lien actif : le partage est un
   // geste explicite, jamais l'état par défaut. Le régénérer écrase la valeur,
   // ce qui invalide l'ancien lien — c'est le mécanisme de révocation.
-  shareToken     String?    @unique
+  shareToken     String?            @unique
   shareCreatedAt DateTime?
   accounts       Account[]
   favorites      Favorite[]
+  shareImages    ShareImageRender[]
 }
 
 model Account {
@@ -56,4 +57,29 @@ model Favorite {
 
   @@unique([userId, igdbGameId])
   @@index([userId])
+}
+
+/// Une image de partage demandée.
+///
+/// C'est la seule table d'événements du schéma : tout le reste décrit un état
+/// (un compte, un favori, un lien), et un état ne dit pas combien de fois on
+/// s'en est servi. Une ligne par demande, jamais mise à jour.
+model ShareImageRender {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// L'année écrite sur l'image.
+  year         Int
+  /// "og" (l'aperçu que recadrent les réseaux) ou "full" (l'image entière).
+  layout       String
+  /// Vrai quand l'image venait du cache : le rendu réel est plus rare que la
+  /// demande, et confondre les deux surestimerait le travail fait.
+  cached       Boolean  @default(false)
+  /// Vrai quand la demande passe par un lien public : ce n'est alors pas le
+  /// propriétaire qui regarde, mais quelqu'un à qui il a envoyé le lien.
+  viaShareLink Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }

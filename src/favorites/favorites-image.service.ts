@@ -5,6 +5,7 @@ import { createCanvas, loadImage, Image, SKRSContext2D } from "@napi-rs/canvas";
 import { createHash } from "crypto";
 import { readFile } from "fs/promises";
 import { join } from "path";
+import type { DatePrecision } from "../app.service";
 
 /**
  * Deux formats pour deux usages, une seule mise en page.
@@ -30,6 +31,10 @@ interface RenderableGame {
 	cover?: { url?: string } | null;
 	/** « JJ/MM/AAAA » tel que rendu par l'API ; seul le jour et le mois servent. */
 	date?: string | null;
+	/** Ce qu'IGDB sait vraiment de la date : voir `dateBadgeLabel`. */
+	date_precision?: DatePrecision | null;
+	/** « April », « Q1 », « 2026 » quand le jour n'est pas connu. */
+	day_label?: string | null;
 }
 
 const PALETTE = {
@@ -129,12 +134,16 @@ export class FavoritesImageService {
 	 * Le résultat est mis en cache sous une empreinte des identifiants affichés :
 	 * ajouter ou retirer un favori change l'empreinte, donc l'image, sans qu'on
 	 * ait à invalider quoi que ce soit à la main.
+	 *
+	 * `fromCache` remonte avec l'image parce que l'appelant en journalise une
+	 * par une : une demande servie du cache n'a rien fait dessiner, et le
+	 * back-office distingue les deux.
 	 */
 	async render(
 		games: RenderableGame[],
 		options: RenderOptions,
 		cacheScope: string
-	): Promise<Buffer> {
+	): Promise<{ buffer: Buffer; fromCache: boolean }> {
 		const preset = LAYOUTS[options.layout];
 		const shown = games.slice(0, preset.maxGames);
 		// Le nom entre dans l'empreinte au même titre que les jeux : il est écrit
@@ -144,10 +153,10 @@ export class FavoritesImageService {
 			.update(`${options.displayName}|${games.map((game) => game.id).join(",")}`)
 			.digest("hex")
 			.slice(0, 12);
-		const cacheKey = `fav_image_${cacheScope}_${options.year}_${options.layout}_${fingerprint}`;
+		const cacheKey = `fav_image_v2_${cacheScope}_${options.year}_${options.layout}_${fingerprint}`;
 
 		const cached = await this.cacheManager.get<string>(cacheKey);
-		if (cached) return Buffer.from(cached, "base64");
+		if (cached) return { buffer: Buffer.from(cached, "base64"), fromCache: true };
 
 		const [covers, logo] = await Promise.all([
 			Promise.all(shown.map((game) => this.loadCover(game))),
@@ -156,7 +165,7 @@ export class FavoritesImageService {
 		const buffer = this.draw(shown, covers, logo, games.length, options);
 
 		await this.cacheManager.set(cacheKey, buffer.toString("base64"), IMAGE_CACHE_TTL);
-		return buffer;
+		return { buffer, fromCache: false };
 	}
 
 	/**
@@ -254,7 +263,7 @@ export class FavoritesImageService {
 			const y = gridTop + row * (coverHeight + titleHeight + preset.gap);
 
 			this.drawCover(ctx, covers[index], x, y, cellWidth, coverHeight);
-			this.drawDateBadge(ctx, game.date, x, y, cellWidth, coverHeight);
+			this.drawDateBadge(ctx, this.dateBadgeLabel(game), x, y, cellWidth, coverHeight);
 			this.drawTitle(ctx, game.name, x, y + coverHeight + 20, cellWidth, preset.titleLines);
 		});
 
@@ -423,26 +432,42 @@ export class FavoritesImageService {
 	}
 
 	/**
+	 * Ce qu'écrit la pastille d'une jaquette.
+	 *
+	 * L'API rend « JJ/MM/AAAA » : dans une image déjà titrée par son année,
+	 * répéter l'année sur chaque jaquette n'apprendrait rien, donc le jour et le
+	 * mois suffisent. Mais cette date-là n'existe que pour les sorties connues
+	 * au jour près : pour les autres, IGDB a fabriqué un jour (le 1er du mois,
+	 * le 31/12 d'une année) qu'il ne faut pas afficher. On écrit alors ce que
+	 * l'API sait vraiment — « April », « Q1 », « 2026 » — comme la pastille du
+	 * calendrier. L'année répétée est ici le moindre mal : elle dit que ce jeu
+	 * n'a pas de date, là où « 31/12 » prétendrait le contraire.
+	 */
+	private dateBadgeLabel(game: RenderableGame): string | null {
+		if (game.date_precision && game.date_precision !== "day") {
+			return game.day_label ?? null;
+		}
+
+		return game.date ? game.date.slice(0, 5) : null;
+	}
+
+	/**
 	 * La date de sortie, en pastille dans le coin de la jaquette.
 	 *
 	 * Reprend le badge de jour des cartes du calendrier : posé à ras du coin,
 	 * arrondi du seul côté qui n'est pas contre un bord, dégradé bleu → cyan.
 	 * Découpée avec la jaquette pour épouser son coin arrondi, et ombrée parce
 	 * qu'une jaquette claire avalerait sinon le bleu.
-	 *
-	 * L'API rend « JJ/MM/AAAA » : dans une image déjà titrée par son année,
-	 * répéter l'année sur chaque jaquette n'apprendrait rien.
 	 */
 	private drawDateBadge(
 		ctx: SKRSContext2D,
-		date: string | null | undefined,
+		label: string | null | undefined,
 		x: number,
 		y: number,
 		coverWidth: number,
 		coverHeight: number
 	) {
-		if (!date) return;
-		const label = date.slice(0, 5);
+		if (!label) return;
 
 		ctx.save();
 		this.roundedRect(ctx, x, y, coverWidth, coverHeight, COVER_RADIUS);

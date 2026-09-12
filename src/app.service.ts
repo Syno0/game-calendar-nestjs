@@ -37,6 +37,26 @@ const DATE_FORMAT = {
 
 export type DatePrecision = "day" | "month" | "quarter" | "year" | "tbd";
 
+/**
+ * Du plus précis au plus vague.
+ *
+ * Une date connue au jour près passe devant celles qui ne le sont pas : ces
+ * dernières sont posées d'office en fin de période et ne disent rien d'un jour.
+ * Même ordre que `PRECISION_RANK` côté front, qui range les jeux d'une case du
+ * calendrier — les deux doivent bouger ensemble.
+ */
+const PRECISION_RANK: Record<DatePrecision, number> = {
+	day: 0,
+	month: 1,
+	quarter: 2,
+	year: 3,
+	tbd: 4,
+};
+
+/** Une précision absente vient d'un enrichissement antérieur : date exacte. */
+export const datePrecisionRank = (precision?: DatePrecision | null): number =>
+	PRECISION_RANK[precision ?? "day"] ?? 0;
+
 const datePrecision = (row: Release_date): DatePrecision => {
 	const format = row.date_format?.id;
 

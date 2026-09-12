@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
-import { AppService } from "../app.service";
+import { AppService, datePrecisionRank } from "../app.service";
 import { CreateFavoriteDto } from "./dto/favorite.dto";
 import { FavoritesImageService, ImageLayout } from "./favorites-image.service";
 
@@ -16,6 +16,8 @@ const SITE_URL = process.env.PUBLIC_SITE_URL || "gamecalendar.app";
 
 @Injectable()
 export class FavoritesService {
+	private readonly logger = new Logger(FavoritesService.name);
+
 	constructor(
 		private readonly prisma: PrismaService,
 		private readonly appService: AppService,
@@ -152,29 +154,64 @@ export class FavoritesService {
 	/**
 	 * L'image partageable d'une année.
 	 *
-	 * Le tri par date puis par nom rend l'image stable : deux appels sur la même
-	 * liste donnent la même mosaïque, ce qui est ce que le cache suppose.
+	 * L'ordre est celui du calendrier : d'abord les sorties datées au jour près,
+	 * puis celles connues au mois, au trimestre, à l'année. Trier par date seule
+	 * mêlerait les deux — un jeu annoncé « 2026 » est posé au 31/12 et viendrait
+	 * se glisser entre deux sorties de décembre, comme s'il en était une.
+	 *
+	 * Le nom départage à égalité : à liste constante, l'image est identique d'un
+	 * appel à l'autre, ce qui est ce que le cache suppose.
 	 */
 	async renderImage(
 		userId: string,
 		displayName: string,
 		year: number,
-		layout: ImageLayout
+		layout: ImageLayout,
+		viaShareLink = false
 	): Promise<Buffer> {
 		const games = await this.listGames(userId);
 		const ofYear = games
 			.filter((game) => releaseYear(game) === year)
 			.sort(
 				(a, b) =>
+					datePrecisionRank(a.date_precision) -
+						datePrecisionRank(b.date_precision) ||
 					(a.release_at ?? "").localeCompare(b.release_at ?? "") ||
 					a.name.localeCompare(b.name)
 			);
 
-		return this.imageService.render(
+		const { buffer, fromCache } = await this.imageService.render(
 			ofYear,
 			{ displayName, year, layout, siteUrl: SITE_URL },
 			userId
 		);
+
+		await this.logImageRender(userId, year, layout, fromCache, viaShareLink);
+		return buffer;
+	}
+
+	/**
+	 * La trace d'une image demandée, pour le back-office.
+	 *
+	 * Écriture volontairement « au mieux » : l'image est déjà dessinée quand on
+	 * arrive ici, et une base indisponible n'est pas une raison de refuser au
+	 * visiteur ce qu'il est venu chercher. On perd une ligne de statistique,
+	 * pas la fonctionnalité.
+	 */
+	private async logImageRender(
+		userId: string,
+		year: number,
+		layout: ImageLayout,
+		cached: boolean,
+		viaShareLink: boolean
+	): Promise<void> {
+		try {
+			await this.prisma.shareImageRender.create({
+				data: { userId, year, layout, cached, viaShareLink },
+			});
+		} catch (err) {
+			this.logger.warn(`Share image not logged (user ${userId}): ${err}`);
+		}
 	}
 
 	/** L'image derrière un lien public, sans jamais exposer l'id interne. */
@@ -185,7 +222,7 @@ export class FavoritesService {
 		});
 		if (!user) throw new NotFoundException("Unknown share link");
 
-		return this.renderImage(user.id, user.displayName, year, layout);
+		return this.renderImage(user.id, user.displayName, year, layout, true);
 	}
 }
 

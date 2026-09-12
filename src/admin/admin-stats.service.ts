@@ -14,8 +14,9 @@ import { PrismaService } from "../prisma/prisma.service";
  *
  * Ce qui n'est pas calculable est tout aussi structurant, et vaut d'être dit
  * plutôt que contourné : les genres et les dates de sortie vivent chez IGDB
- * (seul `igdbGameId` est stocké) ; il n'existe aucune table d'événements,
- * donc ni pages vues ni historique de connexion ; et `remove` est un
+ * (seul `igdbGameId` est stocké) ; la seule table d'événements est
+ * `ShareImageRender`, donc on sait compter les images de partage mais ni les
+ * pages vues ni les connexions ; et `remove` est un
  * `deleteMany` sec, sans pierre tombale, donc le désabonnement est
  * rétroactivement invisible.
  *
@@ -41,12 +42,20 @@ export interface AdminOverview {
 		favorites: number;
 		distinctGames: number;
 		shareLinks: number;
+		/** Images de partage demandées, cache compris. */
+		shareImages: number;
+		/** Celles qui ont vraiment été dessinées : les autres sortaient du cache. */
+		shareImagesRendered: number;
+		/** Celles demandées via un lien public, donc pas par le propriétaire. */
+		shareImagesViaLink: number;
 	};
 	recent: {
 		usersLast7d: number;
 		usersLast30d: number;
 		favoritesLast7d: number;
 		favoritesLast30d: number;
+		shareImagesLast7d: number;
+		shareImagesLast30d: number;
 	};
 	engagement: {
 		usersWithFavorites: number;
@@ -78,6 +87,8 @@ export interface AdminUserRow {
 	favorites: number;
 	providers: string[];
 	hasShareLink: boolean;
+	/** Images de partage demandées pour la liste de cet utilisateur. */
+	shareImages: number;
 }
 
 export interface AdminTimelinePoint {
@@ -112,6 +123,11 @@ export class AdminStatsService {
 			providerRows,
 			platformRows,
 			distinctGameRows,
+			shareImages,
+			shareImagesRendered,
+			shareImagesViaLink,
+			shareImagesLast7d,
+			shareImagesLast30d,
 		] = await Promise.all([
 			this.prisma.user.count(),
 			this.prisma.favorite.count(),
@@ -148,6 +164,11 @@ export class AdminStatsService {
 			this.prisma.$queryRaw<{ count: number }[]>`
 				SELECT COUNT(DISTINCT "igdbGameId")::int AS count FROM "Favorite"
 			`,
+			this.prisma.shareImageRender.count(),
+			this.prisma.shareImageRender.count({ where: { cached: false } }),
+			this.prisma.shareImageRender.count({ where: { viaShareLink: true } }),
+			this.prisma.shareImageRender.count({ where: { createdAt: { gte: d7 } } }),
+			this.prisma.shareImageRender.count({ where: { createdAt: { gte: d30 } } }),
 		]);
 
 		const counts = perUser.map((row) => Number(row.count)).sort((a, b) => a - b);
@@ -172,12 +193,17 @@ export class AdminStatsService {
 				favorites,
 				distinctGames: Number(distinctGameRows[0]?.count ?? 0),
 				shareLinks,
+				shareImages,
+				shareImagesRendered,
+				shareImagesViaLink,
 			},
 			recent: {
 				usersLast7d,
 				usersLast30d,
 				favoritesLast7d,
 				favoritesLast30d,
+				shareImagesLast7d,
+				shareImagesLast30d,
 			},
 			engagement: {
 				usersWithFavorites,
@@ -257,6 +283,7 @@ export class AdminStatsService {
 				favorites: number;
 				providers: string[] | null;
 				hasShareLink: boolean;
+				shareImages: number;
 			}[]
 		>`
 			SELECT u.id,
@@ -266,10 +293,14 @@ export class AdminStatsService {
 			       u."updatedAt" AS "lastSeenAt",
 			       (u."shareToken" IS NOT NULL) AS "hasShareLink",
 			       COUNT(DISTINCT f.id)::int AS favorites,
+			       COUNT(DISTINCT s.id)::int AS "shareImages",
 			       ARRAY_REMOVE(ARRAY_AGG(DISTINCT a.provider::text), NULL) AS providers
 			FROM "User" u
 			LEFT JOIN "Favorite" f ON f."userId" = u.id
 			LEFT JOIN "Account"  a ON a."userId" = u.id
+			-- DISTINCT sur les trois comptes, pas seulement sur les deux
+			-- premiers : chaque jointure multiplie les lignes des autres.
+			LEFT JOIN "ShareImageRender" s ON s."userId" = u.id
 			GROUP BY u.id
 			ORDER BY favorites DESC, u."createdAt" DESC
 			LIMIT ${limit} OFFSET ${offset}
@@ -277,6 +308,7 @@ export class AdminStatsService {
 		return rows.map((row) => ({
 			...row,
 			favorites: Number(row.favorites),
+			shareImages: Number(row.shareImages),
 			providers: row.providers ?? [],
 		}));
 	}
