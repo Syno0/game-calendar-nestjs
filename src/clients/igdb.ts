@@ -87,7 +87,7 @@ export class IgdbApi {
 		end_date: string,
 		filters: Filters
 	): Promise<Release_date[]> {
-		const cacheKey = `games_dates_${start_date}_${end_date}_${JSON.stringify(
+		const cacheKey = `games_dates_v3_${start_date}_${end_date}_${JSON.stringify(
 			filters
 		)}`;
 		const cached = await this.cacheManager.get<Release_date[]>(cacheKey);
@@ -97,7 +97,9 @@ export class IgdbApi {
 		await this.getToken();
 
 		let body =
-			"fields date, game, platform.name, platform.slug, platform.platform_logo.url; limit 500; sort date asc;";
+			"fields date, game, status.id, status.name, date_format.id," +
+			" platform.name, platform.slug, platform.platform_logo.url;" +
+			" limit 500; sort date asc;";
 		body += " where";
 		body += " date > " + dayjs(start_date).subtract(1, "day").unix();
 		body += " &";
@@ -146,7 +148,7 @@ export class IgdbApi {
 		if (ids.length == 0) return [];
 
 		const sorted = [...ids].sort((a, b) => a - b);
-		const cacheKey = `release_dates_games_${sorted.join("_")}`;
+		const cacheKey = `release_dates_games_v3_${sorted.join("_")}`;
 		const cached = await this.cacheManager.get<Release_date[]>(cacheKey);
 		if (cached) {
 			return cached;
@@ -165,7 +167,8 @@ export class IgdbApi {
 
 				do {
 					const body =
-						"fields date, game, platform.name, platform.slug, platform.platform_logo.url;" +
+						"fields date, game, status.id, status.name, date_format.id," +
+						" platform.name, platform.slug, platform.platform_logo.url;" +
 						` where game = (${batch.join(",")});` +
 						` sort date asc; limit ${PAGE_SIZE}; offset ${offset};`;
 
