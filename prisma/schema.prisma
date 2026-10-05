@@ -83,3 +83,92 @@ model ShareImageRender {
   @@index([userId])
   @@index([createdAt])
 }
+
+// ─── RAWG, seconde source à côté d'IGDB ──────────────────────────────────────
+//
+// En base et non dans le cache du NestJS : celui-ci vit en mémoire et se vide
+// à chaque redémarrage, alors que RAWG se paie en quota mensuel. Ce qu'on a
+// fait venir une fois doit survivre à un déploiement.
+
+/// Un jeu tel que RAWG le décrit, au dernier passage de la synchro.
+model RawgGame {
+  rawgId         Int        @id
+  slug           String
+  name           String
+  /// Le nom normalisé (`nameKey()`), seule clé commune avec IGDB : celui-ci
+  /// ne connaît pas RAWG parmi ses sources externes.
+  nameKey        String
+  released       DateTime?  @db.Date
+  tba            Boolean    @default(false)
+  /// Le moment où *notre* synchro a vu la valeur actuelle de `released` pour
+  /// la première fois. Null tant qu'on ne l'a jamais vue changer : on ignore
+  /// alors depuis quand RAWG la tient, et IGDB garde la main. Le `updated` de
+  /// RAWG ne peut pas servir : il bouge pour n'importe quel champ du jeu.
+  releasedSeenAt DateTime?
+  rawgUpdatedAt  DateTime?
+  metacritic     Int?
+  rating         Float?
+  ratingsCount   Int?
+  added          Int?
+  addedByStatus  Json?
+  esrb           String?
+  playtime       Int?
+  platformSlugs  String[]
+  fetchedAt      DateTime   @default(now())
+  links          GameLink[]
+
+  @@index([nameKey])
+  @@index([released])
+}
+
+/// La correspondance d'un jeu IGDB avec RAWG, trouvée ou non.
+model GameLink {
+  igdbGameId      Int       @id
+  /// Null : cherché sans succès. La ligne existe quand même, pour ne pas
+  /// dépenser une recherche RAWG à chaque affichage du même jeu.
+  rawgId          Int?
+  rawg            RawgGame? @relation(fields: [rawgId], references: [rawgId], onDelete: SetNull)
+  /// "name" (nom ou slug retrouvé en base), "search" (recherche RAWG),
+  /// "pending" (recherche impossible pour l'instant : quota, panne, clé
+  /// absente) ou "manual" (posé depuis /admin, jamais réécrit par la synchro).
+  method          String
+  score           Float     @default(0)
+  checkedAt       DateTime  @default(now())
+  /// Le dernier état IGDB connu, recopié à l'affichage : /admin liste les
+  /// désaccords et le calendrier retrouve les jeux déplacés sans rappeler IGDB.
+  igdbName        String?
+  igdbHypes       Int       @default(0)
+  igdbDate        DateTime?
+  igdbPrecision   String?
+  igdbUpdatedAt   DateTime?
+  /// Faux quand la ligne IGDB affichée est un portage ou une réédition : RAWG
+  /// ne connaît que la sortie d'origine, sa date ne dit rien de celle-ci.
+  /// Le lien sert alors aux notes et à la popularité, jamais à la date.
+  rawgDateApplies Boolean   @default(true)
+
+  @@index([rawgId])
+}
+
+/// La date d'un jeu, imposée depuis /admin. Prime sur tout le reste.
+model GameDateOverride {
+  igdbGameId Int       @id
+  /// "igdb", "rawg" ou "manual" (alors `date` et `precision` sont remplis).
+  source     String
+  date       DateTime? @db.Date
+  precision  String?
+  note       String?
+  updatedAt  DateTime  @updatedAt
+}
+
+/// La dernière synchro d'une liste RAWG (`month:2026-10`).
+model RawgSyncState {
+  key      String   @id
+  syncedAt DateTime
+  pages    Int      @default(0)
+}
+
+/// Les appels RAWG du jour : le quota gratuit est de 20 000 par mois.
+model RawgApiUsage {
+  day   DateTime @id @db.Date
+  calls Int      @default(0)
+}

@@ -185,3 +185,172 @@ describe("AppService — précision de la date", () => {
 		expect(game.date_label).toBe("08/04/2027");
 	});
 });
+
+/**
+ * RAWG et les forçages admin : la date peut venir d'ailleurs qu'IGDB, et le
+ * jeu doit alors changer de case — quitter le mois qu'IGDB lui donnait et
+ * entrer dans celui de la date retenue.
+ */
+describe("AppService — dates venues de RAWG", () => {
+	const unix = (iso: string) => Math.floor(Date.parse(`${iso}T00:00:00Z`) / 1000);
+	const utc = (iso: string) => new Date(`${iso}T00:00:00Z`);
+
+	const igdbRow = (game: number, iso: string): Release_date =>
+		({
+			id: game,
+			game,
+			date: unix(iso),
+			updated_at: unix("2026-05-01"),
+			platform: { id: 6, name: "PC", slug: "win" },
+		}) as Release_date;
+
+	/** Un lien RAWG dont la date a changé le 30/09, après la ligne IGDB. */
+	const linked = (igdbGameId: number, released: string) => ({
+		link: {
+			igdbGameId,
+			rawgId: 100 + igdbGameId,
+			method: "name",
+			rawg: {
+				rawgId: 100 + igdbGameId,
+				slug: `game-${igdbGameId}`,
+				released: utc(released),
+				tba: false,
+				releasedSeenAt: utc("2026-09-30"),
+				metacritic: 88,
+				rating: 4.2,
+				ratingsCount: 120,
+				added: 5000,
+				addedByStatus: { toplay: 900 },
+				esrb: "Mature",
+				playtime: 30,
+			},
+		},
+	});
+
+	const service = (options: {
+		october: Release_date[];
+		elsewhere?: Release_date[];
+		infos: Record<number, unknown>;
+		movedInto?: number[];
+	}) =>
+		new AppService(
+			{
+				getGamesBetweenDates: async () => options.october,
+				getGamesByIds: async (ids: number[]) =>
+					[...new Set(ids)].map((id) => ({ id, name: `Game ${id}`, hypes: 50 })),
+				getReleaseDatesByGameIds: async () => options.elsewhere ?? [],
+			} as unknown as IgdbApi,
+			{
+				lookup: async (ids: number[]) =>
+					new Map(
+						ids
+							.filter((id) => options.infos[id])
+							.map((id) => [id, options.infos[id]])
+					),
+				findMovedInto: async () => options.movedInto ?? [],
+				ensureMonths: () => undefined,
+				observe: () => undefined,
+			} as never
+		);
+
+	const october = { start_date: "2026-10-01", end_date: "2026-10-31" };
+
+	it("retire du mois un jeu que RAWG, plus récent, envoie ailleurs", async () => {
+		const games = await service({
+			october: [igdbRow(1, "2026-10-15"), igdbRow(2, "2026-10-20")],
+			infos: { 1: linked(1, "2026-11-12") },
+		}).getGames(october);
+
+		expect(games.map((game) => game.id)).toEqual([2]);
+	});
+
+	it("fait entrer dans le mois un jeu que RAWG y déplace", async () => {
+		const games = await service({
+			october: [igdbRow(2, "2026-10-20")],
+			elsewhere: [igdbRow(3, "2026-12-01")],
+			infos: { 3: linked(3, "2026-10-09") },
+			movedInto: [3],
+		}).getGames(october);
+
+		const moved = games.find((game) => game.id === 3);
+		expect(moved.date).toBe("09/10/2026");
+		expect(moved.date_source).toBe("rawg");
+		expect(moved.date_sources).toEqual({ igdb: "01/12/2026", rawg: "09/10/2026" });
+	});
+
+	it("expose les données RAWG du jeu lié", async () => {
+		const [game] = await service({
+			october: [igdbRow(1, "2026-10-15")],
+			infos: { 1: { link: { ...linked(1, "2026-10-15").link } } },
+		}).getGames(october);
+
+		expect(game.date_source).toBe("igdb");
+		expect(game.metacritic).toBe(88);
+		expect(game.rawg).toMatchObject({
+			url: "https://rawg.io/games/game-1",
+			wishlist: 900,
+			esrb: "Mature",
+			playtime: 30,
+		});
+	});
+
+	it("applique un forçage manuel posé depuis /admin", async () => {
+		const [game] = await service({
+			october: [igdbRow(1, "2026-10-15")],
+			infos: {
+				1: {
+					override: {
+						igdbGameId: 1,
+						source: "manual",
+						date: utc("2026-10-01"),
+						precision: "month",
+					},
+				},
+			},
+		}).getGames(october);
+
+		expect(game.date_source).toBe("manual");
+		expect(game.date_label).toBe("October 2026");
+		expect(game.date).toBe("31/10/2026");
+	});
+
+	it("laisse un jeu sans lien RAWG exactement comme IGDB le donne", async () => {
+		const [game] = await service({
+			october: [igdbRow(1, "2026-10-15")],
+			infos: {},
+		}).getGames(october);
+
+		expect(game.date).toBe("15/10/2026");
+		expect(game.date_source).toBe("igdb");
+		expect(game.rawg).toBeNull();
+		expect(game.metacritic).toBeNull();
+	});
+
+	it("ignore la date RAWG d'un portage, mais garde ses notes", async () => {
+		// Kingdom Hearts III sur une nouvelle console en octobre 2026 : RAWG ne
+		// connaît que la sortie de 2019, qui ne doit pas déplacer la carte.
+		const port = new AppService(
+			{
+				getGamesBetweenDates: async () => [igdbRow(1, "2026-10-08")],
+				getGamesByIds: async () => [
+					{ id: 1, name: "Kingdom Hearts III", hypes: 110, first_release_date: unix("2019-01-25") },
+				],
+				getReleaseDatesByGameIds: async () => [],
+			} as unknown as IgdbApi,
+			{
+				lookup: async () => new Map([[1, linked(1, "2019-01-25")]]),
+				findMovedInto: async () => [],
+				ensureMonths: () => undefined,
+				observe: () => undefined,
+			} as never
+		);
+
+		const [game] = await port.getGames(october);
+
+		expect(game.date).toBe("08/10/2026");
+		expect(game.date_source).toBe("igdb");
+		expect(game.date_sources.rawg).toBeNull();
+		expect(game.metacritic).toBe(88);
+	});
+});
+

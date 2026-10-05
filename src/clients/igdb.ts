@@ -128,7 +128,8 @@ export class IgdbApi {
 		end_date: string,
 		filters: Filters
 	): Promise<Release_date[]> {
-		const cacheKey = `games_dates_v3_${start_date}_${end_date}_${JSON.stringify(
+		// v4 : `updated_at`, que la résolution des dates oppose à RAWG.
+		const cacheKey = `games_dates_v4_${start_date}_${end_date}_${JSON.stringify(
 			filters
 		)}`;
 		const cached = await this.cacheManager.get<Release_date[]>(cacheKey);
@@ -138,7 +139,7 @@ export class IgdbApi {
 		await this.getToken();
 
 		let body =
-			"fields date, game, status.id, status.name, date_format.id," +
+			"fields date, updated_at, game, status.id, status.name, date_format.id," +
 			" platform.name, platform.slug, platform.platform_logo.url;" +
 			" limit 500; sort date asc;";
 		body += " where";
@@ -189,7 +190,7 @@ export class IgdbApi {
 		if (ids.length == 0) return [];
 
 		const sorted = [...ids].sort((a, b) => a - b);
-		const cacheKey = `release_dates_games_v3_${sorted.join("_")}`;
+		const cacheKey = `release_dates_games_v4_${sorted.join("_")}`;
 		const cached = await this.cacheManager.get<Release_date[]>(cacheKey);
 		if (cached) {
 			return cached;
@@ -208,7 +209,7 @@ export class IgdbApi {
 
 				do {
 					const body =
-						"fields date, game, status.id, status.name, date_format.id," +
+						"fields date, updated_at, game, status.id, status.name, date_format.id," +
 						" platform.name, platform.slug, platform.platform_logo.url;" +
 						` where game = (${batch.join(",")});` +
 						` sort date asc; limit ${PAGE_SIZE}; offset ${offset};`;
@@ -243,7 +244,9 @@ export class IgdbApi {
 		// Numeric sort on a copy: the default comparator is lexicographic, so
 		// [2,9,10] and [10,9,2] used to produce different keys for the same set,
 		// and sorting in place silently reordered the caller's array.
-		const cacheKey = `games_ids_${[...ids].sort((a, b) => a - b).join("_")}`;
+		// v3 : `slug` et `first_release_date`, qui servent à retrouver le jeu
+		// sur RAWG et à reconnaître un portage.
+		const cacheKey = `games_ids_v3_${[...ids].sort((a, b) => a - b).join("_")}`;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const cached = await this.cacheManager.get<any[]>(cacheKey);
 		if (cached) {
@@ -254,6 +257,8 @@ export class IgdbApi {
 		const fields = [
 			"id",
 			"name",
+			"slug",
+			"first_release_date",
 			// `game_type` a remplacé `category`, qu'IGDB ne renvoie plus du tout :
 			// un `fields category` ne remonte rien, et sans bruit.
 			"game_type",

@@ -85,7 +85,7 @@ export class AdminStatsController {
  * Le plafond n'est pas décoratif : `days` alimente un `generate_series`, et
  * une valeur non bornée y ferait fabriquer autant de lignes que demandé.
  */
-function bounded(
+export function bounded(
 	raw: string | undefined,
 	fallback: number,
 	min: number,

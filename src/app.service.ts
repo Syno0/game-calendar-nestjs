@@ -1,8 +1,17 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { IgdbApi, SEARCH_DEFAULT_LIMIT } from "./clients/igdb";
 import categoryEnum from "./common/enums/category";
 import statusEnum from "./common/enums/status";
-import { Release_date } from "./common/interfaces/igdb.interface";
+import { Filters, Release_date } from "./common/interfaces/igdb.interface";
+import { DateRow, resolveReleaseDate } from "./rawg/date-resolution";
+import {
+	overrideOf,
+	RawgInfo,
+	rawgDateOf,
+	rawgPayloadOf,
+	RawgService,
+} from "./rawg/rawg.service";
+import { MatchOrigin, MatchRequest } from "./rawg/rawg-sync.service";
 import * as dayjs from "dayjs";
 
 /** `/release_date_statuses` : la sortie complète, celle que le calendrier date. */
@@ -57,7 +66,7 @@ const PRECISION_RANK: Record<DatePrecision, number> = {
 export const datePrecisionRank = (precision?: DatePrecision | null): number =>
 	PRECISION_RANK[precision ?? "day"] ?? 0;
 
-const datePrecision = (row: Release_date): DatePrecision => {
+const datePrecision = (row: DateRow): DatePrecision => {
 	const format = row.date_format?.id;
 
 	if (format === DATE_FORMAT.MONTH) return "month";
@@ -83,7 +92,7 @@ const datePrecision = (row: Release_date): DatePrecision => {
  * elle la ferait passer devant tous les jeux qui, eux, sortent un jour connu.
  * Le mois affiché, lui, ne change pas — c'est le même.
  */
-const calendarDate = (row: Release_date): dayjs.Dayjs => {
+const calendarDate = (row: DateRow): dayjs.Dayjs => {
 	if (datePrecision(row) !== "month") return dayjs.unix(row.date);
 
 	// Décalage compté en UTC, comme la date d'origine. `endOf("month")` le
@@ -109,8 +118,8 @@ const calendarDate = (row: Release_date): dayjs.Dayjs => {
  * `short` est la version qui tient dans la pastille du calendrier, où le mois
  * de la grille est déjà écrit au-dessus.
  */
-const releaseLabels = (
-	row: Release_date
+export const releaseLabels = (
+	row: DateRow
 ): { precision: DatePrecision; label: string; short: string } => {
 	const day = dayjs.unix(row.date);
 	const precision = datePrecision(row);
@@ -147,9 +156,20 @@ const releaseLabels = (
 	}
 };
 
+/** `"2026-10-31T00:00:00.000Z"` tombe-t-il entre deux jours `YYYY-MM-DD` ? */
+const withinDays = (iso: string | null, start: string, end: string): boolean =>
+	!!iso && iso.slice(0, 10) >= start && iso.slice(0, 10) <= end;
+
 @Injectable()
 export class AppService {
-	constructor(private readonly igdbApi: IgdbApi) {}
+	/**
+	 * RAWG est facultatif : sans lui (tests, base indisponible), l'application
+	 * se comporte exactement comme avec IGDB seul.
+	 */
+	constructor(
+		private readonly igdbApi: IgdbApi,
+		@Optional() private readonly rawg?: RawgService
+	) {}
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	async getGames({ start_date, end_date, ...filters }): Promise<any[]> {
@@ -160,9 +180,75 @@ export class AppService {
 		);
 
 		const all_games_id = release_game.map((x) => x.game);
-		const game_list = await this.igdbApi.getGamesByIds(all_games_id);
+		const [game_list, moved] = await Promise.all([
+			this.igdbApi.getGamesByIds(all_games_id),
+			this.movedInto(start_date, end_date, filters, new Set(all_games_id)),
+		]);
+		this.rawg?.ensureMonths(start_date, end_date);
 
-		return this.enrichGames(game_list, release_game);
+		const games = await this.enrichGames(
+			[...game_list, ...moved.games],
+			[...release_game, ...moved.rows],
+			{ origin: "calendar" }
+		);
+
+		// Un jeu qu'IGDB range ce mois-ci mais dont la date retenue (RAWG plus
+		// récent, forçage admin) tombe ailleurs n'a plus rien à faire ici : il
+		// apparaîtra dans le mois où `movedInto` le fera entrer. Un jeu amené
+		// par `movedInto`, lui, n'a sa place ici que si sa date y tombe bel et
+		// bien : la présélection n'est qu'une présélection.
+		const movedIds = new Set(moved.games.map((game) => game.id));
+		return games.filter((game) =>
+			movedIds.has(game.id) || game.date_source !== "igdb"
+				? withinDays(game.release_at, start_date, end_date)
+				: true
+		);
+	}
+
+	/**
+	 * Les jeux qu'IGDB range ailleurs mais qu'une autre date fait tomber dans
+	 * l'intervalle demandé, avec les mêmes filtres que la requête IGDB —
+	 * appliqués ici à la main, puisque ces jeux n'en sont pas sortis.
+	 */
+	private async movedInto(
+		start_date: string,
+		end_date: string,
+		filters: Filters,
+		present: Set<number>
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	): Promise<{ games: any[]; rows: Release_date[] }> {
+		const none = { games: [], rows: [] };
+		if (!this.rawg) return none;
+
+		const ids = (
+			await this.rawg.findMovedInto(start_date, end_date, filters.hypes ?? 0)
+		).filter((id) => !present.has(id));
+		if (ids.length === 0) return none;
+
+		const [games, rows] = await Promise.all([
+			this.igdbApi.getGamesByIds(ids),
+			this.igdbApi.getReleaseDatesByGameIds(ids),
+		]);
+
+		const platforms = Array.isArray(filters.platform)
+			? filters.platform.map((platform) => platform.id)
+			: [];
+		const kept =
+			platforms.length > 0
+				? rows.filter((row) => platforms.includes(row.platform?.id))
+				: rows;
+
+		return {
+			games: games.filter(
+				(game) =>
+					(platforms.length === 0 || kept.some((row) => row.game === game.id)) &&
+					(game.hypes ?? 0) >= (filters.hypes ?? 0) &&
+					(!filters.score || game.total_rating_count > 0) &&
+					(!filters.genres?.length ||
+						game.genres?.some((genre) => filters.genres.includes(genre.id)))
+			),
+			rows: kept,
+		};
 	}
 
 	/**
@@ -175,7 +261,11 @@ export class AppService {
 	 * ship twice on the same platform (a Korean launch then a Western one), and
 	 * that is the only signal we have to tell those launches apart.
 	 */
-	async getGamesByIds(ids: number[], platformByGame?: Map<number, string>) {
+	async getGamesByIds(
+		ids: number[],
+		platformByGame?: Map<number, string>,
+		origin: MatchOrigin = "favorites"
+	) {
 		if (!ids?.length) return [];
 
 		const [game_list, release_rows] = await Promise.all([
@@ -186,6 +276,7 @@ export class AppService {
 		return this.enrichGames(game_list, release_rows, {
 			platformByGame,
 			preferUpcoming: true,
+			origin,
 		});
 	}
 
@@ -258,13 +349,15 @@ export class AppService {
 	 * row wins, which is what the calendar wants: its rows are already scoped to
 	 * the month and platforms on screen.
 	 */
-	private enrichGames(
+	private async enrichGames(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		game_list: any[],
 		release_rows: Release_date[],
 		options: {
 			platformByGame?: Map<number, string>;
 			preferUpcoming?: boolean;
+			/** D'où vient la demande : décide si un jeu vaut une recherche RAWG. */
+			origin?: MatchOrigin;
 		} = {}
 	) {
 		const rowsByGame = new Map<number, Release_date[]>();
@@ -275,16 +368,49 @@ export class AppService {
 			else rowsByGame.set(row.game, [row]);
 		}
 
+		const rawgInfos: Map<number, RawgInfo> = this.rawg
+			? await this.rawg.lookup(game_list.map((x) => x.id))
+			: new Map();
+		const observed: MatchRequest[] = [];
+
 		game_list.map((x) => {
 			const game = this.pickRelease(
 				rowsByGame.get(x.id) ?? [],
 				options.platformByGame?.get(x.id),
 				options.preferUpcoming
 			);
+
+			// IGDB choisit la ligne (et donc la plateforme) ; la date, elle, peut
+			// venir de RAWG s'il l'a changée plus récemment, ou d'un forçage
+			// posé depuis /admin. Tout ce qui suit place et écrit `release`.
+			const info = rawgInfos.get(x.id);
+
+			/*
+			 * La ligne retenue est-elle la sortie d'origine du jeu ? Pour un
+			 * portage ou une réédition (Kingdom Hearts III sur une nouvelle
+			 * console en 2026), RAWG ne connaît que la sortie de 2019 : sa date
+			 * ne dit rien de celle-ci, et la laisser jouer ferait reculer la
+			 * carte de sept ans. Le lien sert alors aux notes, pas à la date —
+			 * sauf si /admin impose explicitement RAWG.
+			 */
+			const firstRelease: number | undefined = x.first_release_date;
+			const isOriginal =
+				!game || !firstRelease || Math.abs(game.date - firstRelease) <= 30 * 86400;
+			const override = overrideOf(info);
+			const rawgDate =
+				isOriginal || override?.source === "rawg" ? rawgDateOf(info) : null;
+			const resolved = resolveReleaseDate(game, rawgDate, override);
+			const release = resolved.row;
+
+			// Un accès anticipé postérieur à la date retenue n'en précède plus rien.
 			const earlyAccess = this.pickEarlyAccess(
 				rowsByGame.get(x.id) ?? [],
 				game
 			);
+			const precedingAccess =
+				earlyAccess && release && earlyAccess.date < release.date
+					? earlyAccess
+					: undefined;
 
 			// Inject human formatted release date into game list
 			x.platform = game
@@ -297,17 +423,27 @@ export class AppService {
 						logo: game.platform?.platform_logo?.url,
 					}
 				: null;
-			const slot = game ? calendarDate(game) : null;
+			const slot = release ? calendarDate(release) : null;
 			x.date = slot ? slot.format("DD/MM/YYYY") : null;
 			x.day = slot ? slot.format("DD") : null;
 
 			// `date` et `day` continuent de placer la carte dans la grille ;
 			// `date_label` et `day_label` sont ce qui s'affiche à leur place, et
 			// ne mentent pas sur ce qu'IGDB sait de la date.
-			const labels = game ? releaseLabels(game) : null;
+			const labels = release ? releaseLabels(release) : null;
 			x.date_precision = labels ? labels.precision : null;
 			x.date_label = labels ? labels.label : null;
 			x.day_label = labels ? labels.short : null;
+
+			// D'où vient la date, et ce que dit chaque source : la fiche du jeu
+			// montre le désaccord plutôt que de le taire.
+			x.date_source = resolved.source;
+			x.date_sources = {
+				igdb: game ? releaseLabels(game).label : null,
+				rawg: resolved.rawgRow ? releaseLabels(resolved.rawgRow).label : null,
+			};
+			x.metacritic = info?.link?.rawg?.metacritic ?? null;
+			x.rawg = rawgPayloadOf(info);
 			// Unambiguous companion to `date`: "12/03/2026" is parsed as M/D/Y by
 			// the browser, which would silently misfile a whole year of favorites.
 			x.release_at = slot ? slot.toISOString() : null;
@@ -316,13 +452,13 @@ export class AppService {
 			// s'affiche à côté d'elle, sur la fiche du jeu. `label` porte le
 			// statut IGDB tel quel — « Advanced Access » et « Early Access » ne
 			// promettent pas la même chose.
-			x.early_access_date = earlyAccess
-				? releaseLabels(earlyAccess).label
+			x.early_access_date = precedingAccess
+				? releaseLabels(precedingAccess).label
 				: null;
-			x.early_access_at = earlyAccess
-				? dayjs.unix(earlyAccess.date).toISOString()
+			x.early_access_at = precedingAccess
+				? dayjs.unix(precedingAccess.date).toISOString()
 				: null;
-			x.early_access_label = earlyAccess?.status?.name ?? null;
+			x.early_access_label = precedingAccess?.status?.name ?? null;
 
 			// Le jeu sort lui-même en accès anticipé : sa date est bien la
 			// bonne, mais ce n'est pas la 1.0 qui arrive ce jour-là. La carte le
@@ -361,8 +497,39 @@ export class AppService {
 						.map((x) => x.company)
 				: "";
 
+			observed.push({
+				id: x.id,
+				name: x.name,
+				slug: x.slug,
+				alternativeNames: (x.alternative_names ?? [])
+					.map((alt) => alt?.name)
+					.filter(Boolean),
+				// L'année de la première sortie, pas celle de la ligne affichée :
+				// RAWG ne date un portage qu'à sa sortie d'origine.
+				year: firstRelease
+					? new Date(firstRelease * 1000).getUTCFullYear()
+					: game
+						? new Date(game.date * 1000).getUTCFullYear()
+						: null,
+				releaseDay:
+					game && isOriginal && datePrecision(game) === "day"
+						? new Date(game.date * 1000)
+						: null,
+				platformSlugs: (rowsByGame.get(x.id) ?? [])
+					.map((row) => row.platform?.slug)
+					.filter(Boolean),
+				hypes: x.hypes,
+				origin: options.origin ?? "calendar",
+				igdbDate: game ? new Date(game.date * 1000) : null,
+				igdbPrecision: game ? datePrecision(game) : null,
+				igdbUpdatedAt: game?.updated_at ? new Date(game.updated_at * 1000) : null,
+				rawgDateApplies: isOriginal,
+			});
+
 			return x;
 		});
+
+		this.rawg?.observe(observed, rawgInfos);
 
 		return game_list;
 	}
@@ -387,7 +554,11 @@ export class AppService {
 		const hits = await this.igdbApi.searchGames(query, limit);
 		if (!hits.length) return [];
 
-		const games = await this.getGamesByIds(hits.map((hit) => hit.id));
+		const games = await this.getGamesByIds(
+			hits.map((hit) => hit.id),
+			undefined,
+			"search"
+		);
 		const rank = new Map(hits.map((hit, index) => [hit.id, index]));
 
 		return games.sort(

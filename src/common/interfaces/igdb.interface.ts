@@ -52,6 +52,12 @@ export interface Release_date {
 	platform: Platform;
 	status?: Release_date_status;
 	date_format?: Release_date_format;
+	/**
+	 * Dernière modification de la ligne côté IGDB (secondes Unix). C'est ce
+	 * qu'on oppose à RAWG pour savoir laquelle des deux dates est la plus
+	 * récente. Absent des entrées de cache antérieures à son ajout.
+	 */
+	updated_at?: number;
 }
 
 /** Une ligne de résultat de `IgdbApi.searchGames` : juste de quoi enchaîner. */

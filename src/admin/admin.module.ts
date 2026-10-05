@@ -3,6 +3,8 @@ import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { AdminAuthController } from "./admin-auth.controller";
 import { AdminAuthService } from "./admin-auth.service";
+import { AdminDatesController } from "./admin-dates.controller";
+import { AdminDatesService } from "./admin-dates.service";
 import { AdminStatsController } from "./admin-stats.controller";
 import { AdminStatsService } from "./admin-stats.service";
 import { ADMIN_JWT_SECRET } from "./admin.config";
@@ -27,7 +29,16 @@ dotenv.config();
 			},
 		}),
 	],
-	providers: [AdminAuthService, AdminStatsService, AdminJwtStrategy],
-	controllers: [AdminAuthController, AdminStatsController],
+	providers: [
+		AdminAuthService,
+		AdminStatsService,
+		AdminDatesService,
+		AdminJwtStrategy,
+	],
+	controllers: [
+		AdminAuthController,
+		AdminStatsController,
+		AdminDatesController,
+	],
 })
 export class AdminModule {}

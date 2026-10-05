@@ -9,6 +9,7 @@ import { AdminModule } from "./admin/admin.module";
 import { AuthModule } from "./auth/auth.module";
 import { IgdbModule } from "./clients/igdb.module";
 import { PrismaModule } from "./prisma/prisma.module";
+import { RawgModule } from "./rawg/rawg.module";
 import { UserAuthModule } from "./user-auth/user-auth.module";
 import { FavoritesModule } from "./favorites/favorites.module";
 import { LoggerMiddleware } from "./common/middlewares/logger.middleware";
@@ -32,6 +33,7 @@ import { LoggerMiddleware } from "./common/middlewares/logger.middleware";
 			}),
 		}),
 		PrismaModule,
+		RawgModule,
 		AuthModule,
 		AdminModule,
 		UserAuthModule,
