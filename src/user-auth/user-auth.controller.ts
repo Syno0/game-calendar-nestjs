@@ -78,4 +78,22 @@ export class UserAuthController {
 	me(@Request() req) {
 		return this.userAuthService.toPublicUser(req.user);
 	}
+
+	/**
+	 * Session glissante : rend un jeton neuf à partir d'un jeton encore valide.
+	 *
+	 * Sans elle, le jeton et le cookie du BFF naissent et meurent ensemble au
+	 * bout de USER_JWT_TTL : un visiteur quotidien se retrouvait déconnecté sans
+	 * prévenir le 7e jour. La garde fait tout le travail — un jeton expiré ou
+	 * d'une autre audience n'arrive jamais jusqu'ici, donc rien à prolonger de
+	 * ce qui est déjà mort.
+	 */
+	@UseGuards(AuthGuard("user-jwt"))
+	@Post("refresh")
+	@ApiOperation({ summary: "Re-issue the caller's session token" })
+	@ApiResponse({ status: 201, description: "A fresh user token" })
+	@ApiResponse({ status: 401, description: "Token missing, expired or invalid" })
+	refresh(@Request() req) {
+		return { token: this.userAuthService.issueToken(req.user) };
+	}
 }

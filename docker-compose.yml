@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: admin
-      POSTGRES_PASSWORD: "TO_REPLACE"
+      POSTGRES_PASSWORD: "*QXU4nML7/"
       POSTGRES_DB: game_calendar
     volumes:
       - postgres_data:/var/lib/postgresql/data

@@ -140,7 +140,9 @@ export class UserAuthService {
 		return created;
 	}
 
-	private issueToken(user: User) {
+	// Public : la connexion OAuth n'est plus le seul point d'émission, le
+	// renouvellement glissant de /auth/refresh en délivre aussi.
+	issueToken(user: User) {
 		return this.jwtService.sign({ sub: user.id });
 	}
 
