@@ -190,7 +190,8 @@ export class IgdbApi {
 		if (ids.length == 0) return [];
 
 		const sorted = [...ids].sort((a, b) => a - b);
-		const cacheKey = `release_dates_games_v4_${sorted.join("_")}`;
+		// v5 : `release_region`, pour la chronologie des sorties de la fiche.
+		const cacheKey = `release_dates_games_v5_${sorted.join("_")}`;
 		const cached = await this.cacheManager.get<Release_date[]>(cacheKey);
 		if (cached) {
 			return cached;
@@ -210,7 +211,8 @@ export class IgdbApi {
 				do {
 					const body =
 						"fields date, updated_at, game, status.id, status.name, date_format.id," +
-						" platform.name, platform.slug, platform.platform_logo.url;" +
+						" platform.name, platform.slug, platform.platform_logo.url," +
+						" release_region.region;" +
 						` where game = (${batch.join(",")});` +
 						` sort date asc; limit ${PAGE_SIZE}; offset ${offset};`;
 
@@ -245,8 +247,9 @@ export class IgdbApi {
 		// [2,9,10] and [10,9,2] used to produce different keys for the same set,
 		// and sorting in place silently reordered the caller's array.
 		// v3 : `slug` et `first_release_date`, qui servent à retrouver le jeu
-		// sur RAWG et à reconnaître un portage.
-		const cacheKey = `games_ids_v3_${[...ids].sort((a, b) => a - b).join("_")}`;
+		// sur RAWG et à reconnaître un portage. v4 : `websites.type`, qui
+		// nomme chaque lien de la fiche (Steam, Discord, site officiel…).
+		const cacheKey = `games_ids_v4_${[...ids].sort((a, b) => a - b).join("_")}`;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const cached = await this.cacheManager.get<any[]>(cacheKey);
 		if (cached) {
@@ -279,6 +282,9 @@ export class IgdbApi {
 			"url",
 			"version_title",
 			"websites.url",
+			// L'identifiant de `/website_types` (1 site officiel, 13 Steam, 18
+			// Discord…) : l'URL seule ne dit pas qu'un site est l'officiel.
+			"websites.type",
 			"videos.video_id",
 			"alternative_names.name",
 			"collection.name",

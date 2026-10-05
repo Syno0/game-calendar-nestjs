@@ -156,6 +156,129 @@ export const releaseLabels = (
 	}
 };
 
+/** Ce que raconte une étape de la vie du jeu, pour la couleur de la fiche. */
+export type MilestoneKind =
+	| "release"
+	| "alpha"
+	| "beta"
+	| "early_access"
+	| "advanced_access"
+	| "cancelled"
+	| "offline"
+	| "other";
+
+const MILESTONE_KIND: Record<number, MilestoneKind> = {
+	1: "alpha",
+	2: "beta",
+	3: "early_access",
+	4: "offline",
+	5: "cancelled",
+	34: "advanced_access",
+};
+
+/** Une date connue du jeu, toutes plateformes et régions qui la partagent. */
+export interface ReleaseMilestone {
+	kind: MilestoneKind;
+	/** Le nom du statut IGDB, « Release » pour une sortie ordinaire. */
+	status: string;
+	date_label: string;
+	date_precision: DatePrecision;
+	/** Le jour où la carte se poserait dans le calendrier ; nul pour un TBD sans date. */
+	at: string | null;
+	platforms: { name: string; slug: string }[];
+	/** Vide quand l'étape vaut partout (ou qu'IGDB ne dit pas où). */
+	regions: string[];
+}
+
+/** `north_america` → « North America ». */
+const regionName = (region: string): string =>
+	region
+		.split("_")
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(" ");
+
+/**
+ * Toutes les dates connues d'un jeu, de la première alpha à la sortie
+ * complète, dans l'ordre où elles arrivent.
+ *
+ * IGDB écrit une ligne par plateforme, par région *et* par statut : huit lignes
+ * pour une seule sortie ne sont pas rares. On les regroupe par étape et par
+ * date affichée, avec la liste des plateformes concernées. Une ligne sans
+ * statut et une ligne « Full Release » disent la même chose (Atomfall porte
+ * les deux pour la même sortie) : elles tombent dans la même étape.
+ *
+ * Ce sont les dates d'IGDB, telles quelles : la date retenue par le
+ * calendrier (RAWG plus récent, forçage admin) reste celle de la carte
+ * « Release », qui dit déjà d'où elle vient.
+ */
+export const releaseTimeline = (rows: Release_date[]): ReleaseMilestone[] => {
+	const groups = new Map<
+		string,
+		ReleaseMilestone & { sortKey: number; everywhere: boolean }
+	>();
+
+	for (const row of rows) {
+		if (!row) continue;
+
+		const kind: MilestoneKind = isFullRelease(row)
+			? "release"
+			: (MILESTONE_KIND[row.status.id] ?? "other");
+		const status = kind === "release" ? "Release" : row.status.name;
+		// Une ligne TBD peut n'avoir aucun timestamp : `releaseLabels` en
+		// ferait un 01/01/1970.
+		const labels = row.date
+			? releaseLabels(row)
+			: { precision: "tbd" as DatePrecision, label: "TBD" };
+		const slot = row.date ? calendarDate(row) : null;
+
+		const key = `${kind}|${status}|${labels.label}`;
+		let group = groups.get(key);
+		if (!group) {
+			group = {
+				kind,
+				status,
+				date_label: labels.label,
+				date_precision: labels.precision,
+				at: slot ? slot.toISOString() : null,
+				platforms: [],
+				regions: [],
+				// Rangées comme dans le calendrier : un « mois seul » se range
+				// en fin de mois, derrière les dates connues au jour près.
+				sortKey: slot ? slot.valueOf() : Infinity,
+				everywhere: false,
+			};
+			groups.set(key, group);
+		}
+
+		const platform = row.platform;
+		if (platform?.slug && !group.platforms.some((p) => p.slug === platform.slug))
+			group.platforms.push({ name: platform.name, slug: platform.slug });
+
+		const region = row.release_region?.region;
+		if (!region || region === "worldwide") group.everywhere = true;
+		else if (!group.regions.includes(regionName(region)))
+			group.regions.push(regionName(region));
+	}
+
+	return [...groups.values()]
+		.sort(
+			(a, b) =>
+				a.sortKey - b.sortKey ||
+				datePrecisionRank(a.date_precision) - datePrecisionRank(b.date_precision)
+		)
+		.map((group) => ({
+			kind: group.kind,
+			status: group.status,
+			date_label: group.date_label,
+			date_precision: group.date_precision,
+			at: group.at,
+			platforms: group.platforms,
+			// Une sortie mondiale et une ligne nord-américaine le même jour :
+			// c'est une sortie mondiale, la région n'apprendrait rien.
+			regions: group.everywhere ? [] : group.regions,
+		}));
+};
+
 /** `"2026-10-31T00:00:00.000Z"` tombe-t-il entre deux jours `YYYY-MM-DD` ? */
 const withinDays = (iso: string | null, start: string, end: string): boolean =>
 	!!iso && iso.slice(0, 10) >= start && iso.slice(0, 10) <= end;
@@ -564,6 +687,18 @@ export class AppService {
 		return games.sort(
 			(a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity)
 		);
+	}
+
+	/**
+	 * La chronologie complète d'un jeu, pour sa fiche.
+	 *
+	 * À part de `/games` : les lignes du calendrier sont bornées au mois et aux
+	 * plateformes à l'écran, la bêta d'avril n'y figure donc pas quand on ouvre
+	 * le jeu en juin. Les recharger pour chaque jeu du mois coûterait des
+	 * dizaines d'appels IGDB pour des fiches que personne n'ouvre.
+	 */
+	async getReleaseTimeline(id: number): Promise<ReleaseMilestone[]> {
+		return releaseTimeline(await this.igdbApi.getReleaseDatesByGameIds([id]));
 	}
 
 	async getAllPlatforms({ ids }: { ids?: number[] }): Promise<string> {

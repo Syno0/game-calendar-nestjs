@@ -45,6 +45,16 @@ export interface Release_date_format {
 	format: string;
 }
 
+/**
+ * La région d'une ligne de sortie (`/release_date_regions`) : `worldwide`,
+ * `europe`, `north_america`, `japan`… Un même jeu peut sortir au Japon des
+ * mois avant le reste du monde, sur la même plateforme.
+ */
+export interface Release_date_region {
+	id: number;
+	region: string;
+}
+
 export interface Release_date {
 	id: number;
 	date: number;
@@ -58,6 +68,11 @@ export interface Release_date {
 	 * récente. Absent des entrées de cache antérieures à son ajout.
 	 */
 	updated_at?: number;
+	/**
+	 * Demandée par `getReleaseDatesByGameIds` seulement : le calendrier n'en
+	 * a pas l'usage, la chronologie de la fiche du jeu si.
+	 */
+	release_region?: Release_date_region;
 }
 
 /** Une ligne de résultat de `IgdbApi.searchGames` : juste de quoi enchaîner. */

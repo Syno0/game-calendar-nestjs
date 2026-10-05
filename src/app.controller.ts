@@ -1,5 +1,13 @@
-import { Controller, Post, Body, UseGuards } from "@nestjs/common";
-import { AppService } from "./app.service";
+import {
+	Controller,
+	Post,
+	Get,
+	Body,
+	Param,
+	ParseIntPipe,
+	UseGuards,
+} from "@nestjs/common";
+import { AppService, ReleaseMilestone } from "./app.service";
 import { AuthGuard } from "@nestjs/passport";
 import {
 	ApiTags,
@@ -47,6 +55,23 @@ export class AppController {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	searchGames(@Body() body: SearchGamesDto): Promise<any[]> {
 		return this.appService.searchGames(body.query, body.limit);
+	}
+
+	@UseGuards(AuthGuard("jwt"))
+	@Get("games/:id/release-dates")
+	@ApiBearerAuth("JWT-auth")
+	@ApiOperation({
+		summary: "Every known date of a game: alpha, beta, early access, release",
+	})
+	@ApiResponse({
+		status: 200,
+		description: "Milestones in chronological order, platforms grouped",
+	})
+	@ApiResponse({ status: 401, description: "Unauthorized" })
+	getReleaseTimeline(
+		@Param("id", ParseIntPipe) id: number
+	): Promise<ReleaseMilestone[]> {
+		return this.appService.getReleaseTimeline(id);
 	}
 
 	@UseGuards(AuthGuard("jwt"))

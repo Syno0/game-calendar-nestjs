@@ -1,4 +1,4 @@
-import { AppService } from "./app.service";
+import { AppService, releaseTimeline } from "./app.service";
 import { IgdbApi } from "./clients/igdb";
 import { Release_date } from "./common/interfaces/igdb.interface";
 
@@ -354,3 +354,75 @@ describe("AppService — dates venues de RAWG", () => {
 	});
 });
 
+
+describe("AppService — chronologie des sorties", () => {
+	const NOON_1_MARCH = Math.floor(Date.UTC(2027, 2, 1, 12) / 1000);
+	const BETA = { id: 2, name: "Beta" };
+	const inRegion = (r: Release_date, region: string): Release_date => ({
+		...r,
+		release_region: { id: 0, region },
+	});
+
+	it("regroupe les plateformes d'une même étape et range les étapes dans l'ordre", async () => {
+		const timeline = await serviceWith([
+			...deluxeRows,
+			row(5, NOON_1_MARCH, "win", BETA),
+		]).getReleaseTimeline(1);
+
+		expect(timeline.map((m) => [m.status, m.date_label])).toEqual([
+			["Beta", "01/03/2027"],
+			["Advanced Access", "07/04/2027"],
+			["Release", "08/04/2027"],
+		]);
+		expect(timeline.map((m) => m.kind)).toEqual([
+			"beta",
+			"advanced_access",
+			"release",
+		]);
+		expect(timeline[2].platforms.map((p) => p.slug)).toEqual(["win", "ps5"]);
+	});
+
+	it("confond une ligne sans statut et une ligne « Full Release » du même jour", () => {
+		const timeline = releaseTimeline([
+			inRegion(row(1, NOON_8_APRIL, "win", FULL_RELEASE), "worldwide"),
+			inRegion(row(2, NOON_8_APRIL, "series-x-s"), "north_america"),
+		]);
+
+		expect(timeline).toHaveLength(1);
+		expect(timeline[0].platforms.map((p) => p.slug)).toEqual([
+			"win",
+			"series-x-s",
+		]);
+		// Sortie mondiale : la ligne nord-américaine n'y ajoute rien.
+		expect(timeline[0].regions).toEqual([]);
+	});
+
+	it("garde distinctes deux sorties régionales à des dates différentes", () => {
+		const timeline = releaseTimeline([
+			inRegion(row(1, NOON_7_APRIL, "ps5"), "japan"),
+			inRegion(row(2, NOON_8_APRIL, "ps5"), "europe"),
+			inRegion(row(3, NOON_8_APRIL, "ps5"), "north_america"),
+		]);
+
+		expect(timeline.map((m) => m.regions)).toEqual([
+			["Japan"],
+			["Europe", "North America"],
+		]);
+	});
+
+	it("range un mois seul derrière les dates au jour près, et un TBD sans date à la fin", () => {
+		const timeline = releaseTimeline([
+			row(1, undefined as unknown as number, "win", undefined, 7),
+			// IGDB date « April 2027 » au 1er avril.
+			row(2, Math.floor(Date.UTC(2027, 3, 1) / 1000), "win", BETA, 1),
+			row(3, NOON_8_APRIL, "ps5"),
+		]);
+
+		expect(timeline.map((m) => m.date_label)).toEqual([
+			"08/04/2027",
+			"April 2027",
+			"TBD",
+		]);
+		expect(timeline[2].at).toBeNull();
+	});
+});
