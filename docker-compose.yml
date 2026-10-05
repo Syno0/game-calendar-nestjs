@@ -9,7 +9,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: admin
-      POSTGRES_PASSWORD: "*QXU4nML7/"
+      # Lu dans .env (non versionné) : ce fichier-ci est suivi par git, et le
+      # vrai mot de passe y a fini dans un commit public le 2026-10-05.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?à définir dans .env}
       POSTGRES_DB: game_calendar
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -26,18 +28,24 @@ services:
       retries: 10
 
   game-calendar-nestjs:
-    container_name: game-calendar-nestjs
+    # Ni `container_name`, ni IP figée, ni port publié : un déploiement sans
+    # coupure (rollout.sh) fait tourner un second conteneur à côté du premier
+    # le temps de la bascule. Le port 3000 publié n'était tapé que par des
+    # scanners. Le BFF joint ce service par l'alias réseau ci-dessous, qui
+    # reprend l'ancien nom du conteneur : pendant une bascule, le DNS docker
+    # renvoie les deux, et `BACK_API_URL` n'a pas eu à changer.
     mem_limit: 1g
     restart: unless-stopped
-    image: game-calendar-nestjs
+    image: game-calendar-nestjs:${NEST_TAG:-latest}
+    build: .
     env_file:
       - .env
     environment:
       - NODE_OPTIONS=--max-old-space-size=768
-    ports:
-      - 3000:3000
+    # Chemin absolu : c'est l'ancien emplacement du projet, où tournent les
+    # journaux depuis le début (voir CLAUDE.md). `./logs` les déplacerait.
     volumes:
-      - ./logs:/app/logs
+      - /opt/game-calendar-github/logs:/app/logs
     # Forme simple plutôt que `condition: service_healthy`, que docker-compose v1
     # rejette en version "3". Si Postgres n'est pas encore prêt, `restart:
     # unless-stopped` relance le back jusqu'à ce qu'il se connecte.
@@ -45,13 +53,34 @@ services:
       - postgres
     networks:
       game-calendar:
-        ipv4_address: 172.20.0.8
+        aliases:
+          - game-calendar-nestjs
+    # Nest n'ouvre son port qu'une fois Prisma connecté : un connect TCP
+    # suffit à dire qu'il est prêt. Échoue dès que rollout.sh pose
+    # /tmp/drain, pour sortir le conteneur du pool Traefik avant son arrêt.
+    healthcheck:
+      test: ["CMD-SHELL", "test ! -f /tmp/drain && nc -z 127.0.0.1 3000"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 20s
+    # main.ts laisse finir les requêtes en cours sur SIGTERM.
+    stop_grace_period: 30s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.gamecalback.rule=Host(`gamecalback.sb-pro.fr`)"
-      - "traefik.http.routers.gamecalback.entrypoints=websecure"
-      - "traefik.http.routers.gamecalback.tls.certresolver=myresolver"
-
+      # ⚠️ Un routeur ou un service ne se modifie jamais sous le même nom :
+      # pendant une bascule, Traefik supprimerait la définition en double.
+      # `gamecalback` est ainsi devenu `nest`, avec une priorité explicite
+      # pour l'emporter sur l'ancien dès son inscription.
+      - "traefik.http.routers.nest.rule=Host(`gamecalback.sb-pro.fr`)"
+      - "traefik.http.routers.nest.priority=50"
+      - "traefik.http.routers.nest.entrypoints=websecure"
+      - "traefik.http.routers.nest.tls.certresolver=myresolver"
+      - "traefik.http.routers.nest.service=nest"
+      - "traefik.http.routers.nest.middlewares=nest-retry"
+      - "traefik.http.middlewares.nest-retry.retry.attempts=3"
+      # Port explicite : sans port publié, Traefik ne saurait plus le deviner.
+      - "traefik.http.services.nest.loadbalancer.server.port=3000"
 
 # docker network create -d bridge --subnet=172.20.0.0/16 --gateway=172.20.0.1 game-calendar
 networks:

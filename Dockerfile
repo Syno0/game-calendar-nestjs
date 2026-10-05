@@ -23,5 +23,7 @@ RUN npx prisma generate
 # Creates a "dist" folder with the production build
 RUN npm run build
 
-# Start the server using the production build
-CMD [ "npm", "run", "start:prod" ]
+# Start the server using the production build. `node` directement et non
+# `npm run start:prod` : npm en PID 1 ne relaie pas SIGTERM au processus node,
+# qui ne pourrait alors pas s'arrêter proprement (voir main.ts).
+CMD [ "node", "dist/src/main" ]

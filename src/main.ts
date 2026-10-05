@@ -3,6 +3,7 @@ import { NestExpressApplication } from "@nestjs/platform-express";
 import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
 import { join } from "path";
+import * as net from "net";
 import * as cookieParser from "cookie-parser";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { winstonConfig } from "./common/logger/winston.config";
@@ -73,5 +74,28 @@ async function bootstrap() {
 	app.use(cookieParser());
 
 	await app.listen(3000);
+
+	// Arrêt propre sur SIGTERM (docker stop, et donc chaque déploiement) :
+	// d'abord cesser d'accepter des connexions et laisser finir les requêtes
+	// en cours — le BFF, refoulé, se rabat alors sur l'autre conteneur que
+	// lui donne le DNS — PUIS fermer Nest. `enableShutdownHooks()` ferait
+	// l'inverse en Nest 10 : `onModuleDestroy` (la déconnexion Prisma) passe
+	// avant la fermeture du serveur HTTP, et les requêtes en vol perdraient
+	// leur base. Sans aucun gestionnaire, Node ignore SIGTERM en PID 1 et
+	// docker finit par le tuer au bout du délai de grâce, en plein travail.
+	//
+	// `net.Server.prototype.close` et surtout pas `server.close()` : depuis
+	// Node 19, ce dernier appelle `closeIdleConnections()`, qui tient pour
+	// inactive une connexion dont la réponse est écrite… mais encore dans le
+	// tampon de Node, et la détruit avec. Une réponse /games pèse 1,4 Mo :
+	// sur un conteneur jetable, les 8 requêtes en vol arrivaient tronquées.
+	// La fermeture bas niveau cesse d'écouter sans toucher aux connexions, et
+	// son rappel ne vient qu'une fois la dernière fermée — les connexions
+	// keep-alive inactives tombent d'elles-mêmes au bout de `keepAliveTimeout`.
+	process.once("SIGTERM", () => {
+		net.Server.prototype.close.call(app.getHttpServer(), () => {
+			app.close().finally(() => process.exit(0));
+		});
+	});
 }
 bootstrap();
