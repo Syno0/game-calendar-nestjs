@@ -21,6 +21,12 @@ model User {
   avatarUrl      String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
+  // La dernière activité connue : connexion OAuth *ou* renouvellement de
+  // session. `updatedAt` ne suffit pas à dater l'inactivité — la session
+  // glissante se prolonge sans jamais repasser par OAuth, donc un visiteur
+  // quotidien garderait la date de sa toute première connexion et serait
+  // purgé comme inactif (voir AccountRetentionService).
+  lastSeenAt     DateTime           @default(now())
   // Jeton de partage public. Null = aucun lien actif : le partage est un
   // geste explicite, jamais l'état par défaut. Le régénérer écrase la valeur,
   // ce qui invalide l'ancien lien — c'est le mécanisme de révocation.
@@ -29,6 +35,8 @@ model User {
   accounts       Account[]
   favorites      Favorite[]
   shareImages    ShareImageRender[]
+
+  @@index([lastSeenAt])
 }
 
 model Account {

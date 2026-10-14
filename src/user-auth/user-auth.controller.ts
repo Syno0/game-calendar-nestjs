@@ -2,7 +2,9 @@ import {
 	BadRequestException,
 	Body,
 	Controller,
+	Delete,
 	Get,
+	HttpCode,
 	Param,
 	Post,
 	Query,
@@ -93,7 +95,17 @@ export class UserAuthController {
 	@ApiOperation({ summary: "Re-issue the caller's session token" })
 	@ApiResponse({ status: 201, description: "A fresh user token" })
 	@ApiResponse({ status: 401, description: "Token missing, expired or invalid" })
-	refresh(@Request() req) {
-		return { token: this.userAuthService.issueToken(req.user) };
+	async refresh(@Request() req) {
+		return { token: await this.userAuthService.refreshToken(req.user) };
+	}
+
+	@UseGuards(AuthGuard("user-jwt"))
+	@Delete("me")
+	@HttpCode(204)
+	@ApiOperation({ summary: "Delete the caller's account and all its data" })
+	@ApiResponse({ status: 204, description: "Account deleted" })
+	@ApiResponse({ status: 401, description: "Token missing, expired or invalid" })
+	async deleteMe(@Request() req) {
+		await this.userAuthService.deleteAccount(req.user.id);
 	}
 }

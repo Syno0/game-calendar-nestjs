@@ -119,8 +119,17 @@ export class RawgService {
 	 * `resolveReleaseDate`, une fois les lignes IGDB chargées. Elle écarte
 	 * seulement, sans rien demander à IGDB, les jeux où IGDB garde la main à
 	 * coup sûr.
+	 *
+	 * `liked` échappe au seuil de hype : `igdbHypes` ne compte que la hype
+	 * d'IGDB, et un like sur GameCalendar peut suffire à faire passer le jeu.
+	 * L'appelant refait le tri avec la hype complète.
 	 */
-	async findMovedInto(start: string, end: string, minHypes = 0): Promise<number[]> {
+	async findMovedInto(
+		start: string,
+		end: string,
+		minHypes = 0,
+		liked: number[] = []
+	): Promise<number[]> {
 		const from = new Date(`${start}T00:00:00Z`);
 		const to = new Date(`${end}T00:00:00Z`);
 
@@ -132,7 +141,10 @@ export class RawgService {
 				}),
 				this.prisma.gameLink.findMany({
 					where: {
-						igdbHypes: { gte: minHypes },
+						OR: [
+							{ igdbHypes: { gte: minHypes } },
+							{ igdbGameId: { in: liked } },
+						],
 						rawg: { released: { gte: from, lte: to }, tba: false },
 					},
 					select: {

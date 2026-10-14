@@ -4,6 +4,7 @@ import { PassportModule } from "@nestjs/passport";
 import { UserAuthController } from "./user-auth.controller";
 import { UserAuthService } from "./user-auth.service";
 import { UserJwtStrategy } from "./strategies/user-jwt.strategy";
+import { AccountRetentionService } from "./account-retention.service";
 
 // Same workaround as AuthModule: JwtModule.register reads process.env at module
 // definition time, before ConfigModule has loaded the .env file.
@@ -21,7 +22,7 @@ dotenv.config();
 			},
 		}),
 	],
-	providers: [UserAuthService, UserJwtStrategy],
+	providers: [UserAuthService, UserJwtStrategy, AccountRetentionService],
 	controllers: [UserAuthController],
 	exports: [UserAuthService],
 })

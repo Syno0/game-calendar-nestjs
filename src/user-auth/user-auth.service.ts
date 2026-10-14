@@ -96,6 +96,7 @@ export class UserAuthService {
 				data: {
 					displayName: profile.displayName,
 					avatarUrl: profile.avatarUrl,
+					lastSeenAt: new Date(),
 				},
 			});
 		}
@@ -119,7 +120,10 @@ export class UserAuthService {
 				},
 			});
 			this.logger.log(`Linked ${provider} account to user ${linkable.id}`);
-			return linkable;
+			return this.prisma.user.update({
+				where: { id: linkable.id },
+				data: { lastSeenAt: new Date() },
+			});
 		}
 
 		const created = await this.prisma.user.create({
@@ -144,6 +148,33 @@ export class UserAuthService {
 	// renouvellement glissant de /auth/refresh en délivre aussi.
 	issueToken(user: User) {
 		return this.jwtService.sign({ sub: user.id });
+	}
+
+	/**
+	 * Le renouvellement de session est le seul signe de vie régulier d'un
+	 * utilisateur qui ne repasse jamais par OAuth : c'est lui qui date son
+	 * activité. Un renouvellement par demi-vie de jeton (3,5 jours) suffit
+	 * largement pour une purge qui se compte en années, et évite d'écrire en
+	 * base à chaque chargement de page.
+	 */
+	async refreshToken(user: User) {
+		await this.prisma.user.update({
+			where: { id: user.id },
+			data: { lastSeenAt: new Date() },
+		});
+		return this.issueToken(user);
+	}
+
+	/**
+	 * Le droit à l'effacement, en un geste. Comptes OAuth, favoris, lien de
+	 * partage et historique des images partent par `onDelete: Cascade` : rien
+	 * à énumérer ici, et une table ajoutée plus tard suivra si elle déclare la
+	 * même relation. Les jetons déjà émis deviennent inutilisables d'eux-mêmes,
+	 * `UserJwtStrategy` ne retrouvant plus l'utilisateur.
+	 */
+	async deleteAccount(userId: string) {
+		await this.prisma.user.delete({ where: { id: userId } });
+		this.logger.log(`Deleted user ${userId} at their request`);
 	}
 
 	async toPublicUser(user: User): Promise<PublicUser> {

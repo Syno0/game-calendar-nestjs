@@ -355,6 +355,113 @@ describe("AppService — dates venues de RAWG", () => {
 });
 
 
+describe("AppService — les likes comptent dans la hype", () => {
+	const unix = (iso: string) => Math.floor(Date.parse(`${iso}T00:00:00Z`) / 1000);
+	const october = { start_date: "2026-10-01", end_date: "2026-10-31" };
+
+	/** La hype d'IGDB de chaque jeu, tous sortis en octobre. */
+	const igdbHypes: Record<number, number> = { 1: 40, 2: 5, 3: 0, 4: 12 };
+
+	/**
+	 * Un faux IGDB qui applique le seuil de hype et la restriction aux jeux
+	 * demandés comme le vrai : c'est tout l'enjeu, le vrai ignore nos likes.
+	 */
+	const service = (likes: Record<number, number>, asked: number[][] = []) =>
+		new AppService(
+			{
+				getGamesBetweenDates: async (
+					_start: string,
+					_end: string,
+					filters: { hypes?: number },
+					gameIds?: number[]
+				) => {
+					if (gameIds) asked.push(gameIds);
+					return Object.keys(igdbHypes)
+						.map(Number)
+						.filter((id) => igdbHypes[id] >= (filters.hypes ?? 0))
+						.filter((id) => !gameIds || gameIds.includes(id))
+						.map(
+							(id) =>
+								({
+									id,
+									game: id,
+									date: unix("2026-10-15"),
+									platform: { id: 6, name: "PC", slug: "win" },
+								}) as Release_date
+						);
+				},
+				getGamesByIds: async (ids: number[]) =>
+					ids.map((id) => ({ id, name: `Game ${id}`, hypes: igdbHypes[id] })),
+				getReleaseDatesByGameIds: async () => [],
+			} as unknown as IgdbApi,
+			undefined,
+			{
+				favorite: {
+					groupBy: async ({ where }: { where?: { igdbGameId: { in: number[] } } }) =>
+						Object.entries(likes)
+							.map(([id, count]) => ({ igdbGameId: Number(id), _count: { _all: count } }))
+							.filter((row) => !where || where.igdbGameId.in.includes(row.igdbGameId)),
+				},
+			} as never
+		);
+
+	it("fait passer le seuil de 10 à un jeu sans hype IGDB liké une fois", async () => {
+		const games = await service({ 3: 1 }).getGames({ ...october, hypes: 10 });
+
+		expect(games.map((game) => game.id).sort()).toEqual([1, 3, 4]);
+		const liked = games.find((game) => game.id === 3);
+		expect(liked).toMatchObject({ hypes: 10, igdb_hypes: 0, likes: 1 });
+	});
+
+	it("laisse sous le seuil un jeu dont les likes ne suffisent pas", async () => {
+		// 5 + 10 = 15 : au-dessus de 10, sous 20.
+		const games = await service({ 2: 1 }).getGames({ ...october, hypes: 20 });
+
+		expect(games.map((game) => game.id).sort()).toEqual([1]);
+	});
+
+	it("ajoute 10 par like à la hype affichée, même sans seuil", async () => {
+		const games = await service({ 1: 3 }).getGames({ ...october, hypes: 0 });
+
+		expect(games.find((game) => game.id === 1)).toMatchObject({
+			hypes: 70,
+			igdb_hypes: 40,
+			likes: 3,
+		});
+		expect(games.find((game) => game.id === 2).hypes).toBe(5);
+	});
+
+	it("ne relance pas IGDB sans seuil ni sans like", async () => {
+		const asked: number[][] = [];
+		await service({ 3: 1 }, asked).getGames({ ...october, hypes: 0 });
+		await service({}, asked).getGames({ ...october, hypes: 10 });
+
+		expect(asked).toEqual([]);
+	});
+
+	it("ne compte pas deux fois les likes d'un jeu déjà enrichi", async () => {
+		// Le cache d'IGDB peut rendre l'objet modifié par une requête précédente.
+		const cached = { id: 1, name: "Game 1", hypes: 40 };
+		const app = new AppService(
+			{
+				getGamesByIds: async () => [cached],
+				getReleaseDatesByGameIds: async () => [],
+			} as unknown as IgdbApi,
+			undefined,
+			{
+				favorite: {
+					groupBy: async () => [{ igdbGameId: 1, _count: { _all: 2 } }],
+				},
+			} as never
+		);
+
+		await app.getGamesByIds([1]);
+		const [again] = await app.getGamesByIds([1]);
+
+		expect(again.hypes).toBe(60);
+	});
+});
+
 describe("AppService — chronologie des sorties", () => {
 	const NOON_1_MARCH = Math.floor(Date.UTC(2027, 2, 1, 12) / 1000);
 	const BETA = { id: 2, name: "Beta" };

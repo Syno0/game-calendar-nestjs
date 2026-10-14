@@ -123,15 +123,23 @@ export class IgdbApi {
 		return this.token;
 	}
 
+	/**
+	 * `gameIds` restreint la recherche à ces jeux : c'est ainsi que le
+	 * calendrier repêche les jeux likés sur GameCalendar qu'IGDB, faute d'une
+	 * hype suffisante chez lui, a laissés sous le seuil.
+	 */
 	public async getGamesBetweenDates(
 		start_date: string,
 		end_date: string,
-		filters: Filters
+		filters: Filters,
+		gameIds?: number[]
 	): Promise<Release_date[]> {
+		if (gameIds && gameIds.length === 0) return [];
+		const only = gameIds ? [...gameIds].sort((a, b) => a - b) : null;
 		// v4 : `updated_at`, que la résolution des dates oppose à RAWG.
 		const cacheKey = `games_dates_v4_${start_date}_${end_date}_${JSON.stringify(
 			filters
-		)}`;
+		)}${only ? `_ids_${only.join("_")}` : ""}`;
 		const cached = await this.cacheManager.get<Release_date[]>(cacheKey);
 		if (cached) {
 			return cached;
@@ -147,6 +155,7 @@ export class IgdbApi {
 		body += " &";
 		body += " date < " + dayjs(end_date).add(1, "day").unix();
 		if (filters.hypes > 0) body += " & game.hypes >= " + filters.hypes;
+		if (only) body += ` & game = (${only.join(",")})`;
 		if (filters.score) body += " & game.total_rating_count > 0";
 		if (Array.isArray(filters.platform) && filters.platform?.length > 0)
 			body += ` & platform = (${filters.platform.map((x) => x.id)})`;

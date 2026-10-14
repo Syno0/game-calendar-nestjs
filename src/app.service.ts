@@ -1,8 +1,10 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { IgdbApi, SEARCH_DEFAULT_LIMIT } from "./clients/igdb";
 import categoryEnum from "./common/enums/category";
 import statusEnum from "./common/enums/status";
 import { Filters, Release_date } from "./common/interfaces/igdb.interface";
+import { hypeWithLikes, igdbHypesOf } from "./common/likes";
+import { PrismaService } from "./prisma/prisma.service";
 import { DateRow, resolveReleaseDate } from "./rawg/date-resolution";
 import {
 	overrideOf,
@@ -285,34 +287,72 @@ const withinDays = (iso: string | null, start: string, end: string): boolean =>
 
 @Injectable()
 export class AppService {
+	private readonly logger = new Logger(AppService.name);
+
 	/**
 	 * RAWG est facultatif : sans lui (tests, base indisponible), l'application
-	 * se comporte exactement comme avec IGDB seul.
+	 * se comporte exactement comme avec IGDB seul. Sans base, pas de likes non
+	 * plus : la hype est alors celle d'IGDB.
 	 */
 	constructor(
 		private readonly igdbApi: IgdbApi,
-		@Optional() private readonly rawg?: RawgService
+		@Optional() private readonly rawg?: RawgService,
+		@Optional() private readonly prisma?: PrismaService
 	) {}
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	async getGames({ start_date, end_date, ...filters }): Promise<any[]> {
-		const release_game = await this.igdbApi.getGamesBetweenDates(
-			start_date,
-			end_date,
-			filters
-		);
+		const minHypes: number = filters.hypes ?? 0;
+		// Tous les jeux likés, pas seulement ceux du mois : on ne sait pas
+		// encore lesquels y sortent, c'est IGDB qui le dira.
+		const likes = await this.likeCounts();
 
-		const all_games_id = release_game.map((x) => x.game);
-		const [game_list, moved] = await Promise.all([
+		/*
+		 * IGDB filtre la hype lui-même (`game.hypes >= …`) et ne connaît pas
+		 * nos likes : un jeu à 5 de hype liké une fois (15) ne sortirait pas
+		 * d'une requête à 10. Une seconde requête, restreinte aux jeux likés et
+		 * sans seuil, les repêche ; le seuil leur est appliqué ici, likes
+		 * compris. Inutile sans seuil : la première les ramène déjà tous.
+		 */
+		const [release_game, liked_rows] = await Promise.all([
+			this.igdbApi.getGamesBetweenDates(start_date, end_date, filters),
+			minHypes > 0 && likes.size > 0
+				? this.igdbApi.getGamesBetweenDates(
+						start_date,
+						end_date,
+						{ ...filters, hypes: 0 },
+						[...likes.keys()]
+					)
+				: Promise.resolve([] as Release_date[]),
+		]);
+
+		const fromIgdb = new Set(release_game.map((x) => x.game));
+		const rescued = liked_rows.filter((row) => !fromIgdb.has(row.game));
+		const all_games_id = [
+			...new Set([...fromIgdb, ...rescued.map((row) => row.game)]),
+		];
+		const [fetched, moved] = await Promise.all([
 			this.igdbApi.getGamesByIds(all_games_id),
-			this.movedInto(start_date, end_date, filters, new Set(all_games_id)),
+			this.movedInto(
+				start_date,
+				end_date,
+				filters,
+				new Set(all_games_id),
+				likes
+			),
 		]);
 		this.rawg?.ensureMonths(start_date, end_date);
 
+		const game_list = fetched.filter(
+			(game) =>
+				fromIgdb.has(game.id) ||
+				hypeWithLikes(igdbHypesOf(game), likes.get(game.id) ?? 0) >= minHypes
+		);
+
 		const games = await this.enrichGames(
 			[...game_list, ...moved.games],
-			[...release_game, ...moved.rows],
-			{ origin: "calendar" }
+			[...release_game, ...rescued, ...moved.rows],
+			{ origin: "calendar", likes }
 		);
 
 		// Un jeu qu'IGDB range ce mois-ci mais dont la date retenue (RAWG plus
@@ -337,14 +377,17 @@ export class AppService {
 		start_date: string,
 		end_date: string,
 		filters: Filters,
-		present: Set<number>
+		present: Set<number>,
+		likes: Map<number, number> = new Map()
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	): Promise<{ games: any[]; rows: Release_date[] }> {
 		const none = { games: [], rows: [] };
 		if (!this.rawg) return none;
 
 		const ids = (
-			await this.rawg.findMovedInto(start_date, end_date, filters.hypes ?? 0)
+			await this.rawg.findMovedInto(start_date, end_date, filters.hypes ?? 0, [
+				...likes.keys(),
+			])
 		).filter((id) => !present.has(id));
 		if (ids.length === 0) return none;
 
@@ -365,7 +408,8 @@ export class AppService {
 			games: games.filter(
 				(game) =>
 					(platforms.length === 0 || kept.some((row) => row.game === game.id)) &&
-					(game.hypes ?? 0) >= (filters.hypes ?? 0) &&
+					hypeWithLikes(igdbHypesOf(game), likes.get(game.id) ?? 0) >=
+						(filters.hypes ?? 0) &&
 					(!filters.score || game.total_rating_count > 0) &&
 					(!filters.genres?.length ||
 						game.genres?.some((genre) => filters.genres.includes(genre.id)))
@@ -481,6 +525,8 @@ export class AppService {
 			preferUpcoming?: boolean;
 			/** D'où vient la demande : décide si un jeu vaut une recherche RAWG. */
 			origin?: MatchOrigin;
+			/** Les likes déjà comptés par l'appelant, pour ne pas les recompter. */
+			likes?: Map<number, number>;
 		} = {}
 	) {
 		const rowsByGame = new Map<number, Release_date[]>();
@@ -491,9 +537,12 @@ export class AppService {
 			else rowsByGame.set(row.game, [row]);
 		}
 
-		const rawgInfos: Map<number, RawgInfo> = this.rawg
-			? await this.rawg.lookup(game_list.map((x) => x.id))
-			: new Map();
+		const [rawgInfos, likes] = await Promise.all([
+			this.rawg
+				? this.rawg.lookup(game_list.map((x) => x.id))
+				: Promise.resolve(new Map<number, RawgInfo>()),
+			options.likes ?? this.likeCounts(game_list.map((x) => x.id)),
+		]);
 		const observed: MatchRequest[] = [];
 
 		game_list.map((x) => {
@@ -604,8 +653,12 @@ export class AppService {
 					artwork.url = artwork.url.replace("t_thumb", "t_cover_big");
 				});
 
-			// Setting null to 0
-			x.hypes = x.hypes ? x.hypes : 0;
+			// `hypes` est celle que tout le monde lit — tri des cases, flamme de
+			// la carte, image de partage — : elle compte donc les likes. Les deux
+			// parts restent exposées pour que la fiche puisse les détailler.
+			x.igdb_hypes = igdbHypesOf(x);
+			x.likes = likes.get(x.id) ?? 0;
+			x.hypes = hypeWithLikes(x.igdb_hypes, x.likes);
 			x.follow = x.follow ? x.follow : 0;
 			x.total_rating = x.total_rating ? x.total_rating : 0;
 
@@ -641,7 +694,9 @@ export class AppService {
 				platformSlugs: (rowsByGame.get(x.id) ?? [])
 					.map((row) => row.platform?.slug)
 					.filter(Boolean),
-				hypes: x.hypes,
+				// `GameLink.igdbHypes` : la hype d'IGDB seule, celle que /admin
+				// montre à côté des dates d'IGDB.
+				hypes: x.igdb_hypes,
 				origin: options.origin ?? "calendar",
 				igdbDate: game ? new Date(game.date * 1000) : null,
 				igdbPrecision: game ? datePrecision(game) : null,
@@ -669,6 +724,26 @@ export class AppService {
 	 * qui n'a rien à voir avec la pertinence : l'ordre du classement est donc
 	 * réappliqué à la fin, sinon le meilleur résultat n'arrive pas en tête.
 	 */
+	/**
+	 * Le nombre de likes (de favoris) par jeu, pour `ids` ou pour tous les jeux
+	 * likés. Une panne de la base ne doit pas vider le calendrier : la hype
+	 * retombe alors sur celle d'IGDB.
+	 */
+	private async likeCounts(ids?: number[]): Promise<Map<number, number>> {
+		if (!this.prisma || ids?.length === 0) return new Map();
+		try {
+			const rows = await this.prisma.favorite.groupBy({
+				by: ["igdbGameId"],
+				where: ids ? { igdbGameId: { in: ids } } : undefined,
+				_count: { _all: true },
+			});
+			return new Map(rows.map((row) => [row.igdbGameId, row._count._all]));
+		} catch (error) {
+			this.logger.warn(`Likes skipped: ${(error as Error).message}`);
+			return new Map();
+		}
+	}
+
 	async searchGames(
 		query: string,
 		limit = SEARCH_DEFAULT_LIMIT
