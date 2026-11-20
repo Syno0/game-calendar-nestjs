@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
 import { IgdbApi, SEARCH_DEFAULT_LIMIT } from "./clients/igdb";
 import categoryEnum from "./common/enums/category";
 import statusEnum from "./common/enums/status";
@@ -762,6 +762,21 @@ export class AppService {
 		return games.sort(
 			(a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity)
 		);
+	}
+
+	/**
+	 * Un seul jeu, sous la même forme qu'une carte du calendrier : c'est ce
+	 * qu'ouvre un lien `/?game=<id>`, qui doit afficher la fiche et sauter au
+	 * mois de sortie sans connaître ni ce mois ni les filtres du visiteur.
+	 *
+	 * Origine `search` : visiter un lien ne doit pas entamer le quota RAWG,
+	 * le jeu sera rapproché à son passage dans un mois du calendrier.
+	 */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	async getGame(id: number): Promise<any> {
+		const [game] = await this.getGamesByIds([id], undefined, "search");
+		if (!game) throw new NotFoundException(`Unknown game ${id}`);
+		return game;
 	}
 
 	/**

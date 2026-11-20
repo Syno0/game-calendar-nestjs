@@ -58,6 +58,18 @@ export class AppController {
 	}
 
 	@UseGuards(AuthGuard("jwt"))
+	@Get("games/:id")
+	@ApiBearerAuth("JWT-auth")
+	@ApiOperation({ summary: "One game, same shape as an entry of POST /games" })
+	@ApiResponse({ status: 200, description: "The game" })
+	@ApiResponse({ status: 401, description: "Unauthorized" })
+	@ApiResponse({ status: 404, description: "Unknown game" })
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	getGame(@Param("id", ParseIntPipe) id: number): Promise<any> {
+		return this.appService.getGame(id);
+	}
+
+	@UseGuards(AuthGuard("jwt"))
 	@Get("games/:id/release-dates")
 	@ApiBearerAuth("JWT-auth")
 	@ApiOperation({
