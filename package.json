@@ -6,7 +6,7 @@
 	"private": true,
 	"license": "UNLICENSED",
 	"volta": {
-		"node": "22.21.0",
+		"node": "22.23.4",
 		"npm": "11.6.2"
 	},
 	"scripts": {

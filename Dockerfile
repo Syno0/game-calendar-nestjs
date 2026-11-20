@@ -1,5 +1,7 @@
-# Base image
-FROM node:22-alpine
+# Base image. Version épinglée et non `22-alpine` : un tag flottant déjà présent
+# dans le cache local n'est pas re-téléchargé au build, si bien qu'un correctif
+# de sécurité de Node pouvait ne jamais arriver en prod sans `--pull`.
+FROM node:22.23.4-alpine
 
 # Polices pour le rendu des images de partage : l'image alpine n'en embarque
 # aucune, et @napi-rs/canvas dessinerait alors des rectangles vides.
